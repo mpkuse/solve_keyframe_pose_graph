@@ -68,7 +68,7 @@ public:
     void print_nodes_lengths()
     {
         cout << "pose,cov,stamps " << node_pose.size() << "," << node_timestamps.size() << "," << node_pose_covariance.size() ;
-        cout << "\tedges " << loopclosure_edges.size() << "," << loopclosure_edges_goodness.size() ;
+        cout << "\tedges " << loopclosure_edges.size() << "," << loopclosure_edges_goodness.size() << "," << loopclosure_p_T_c.size();
         cout << endl;
     }
 
@@ -133,6 +133,27 @@ public:
         return status;
     }
 
+    // return p_T_c
+    bool getEdgePose( int i, Matrix4d& p_T_c )
+    {
+        if( i>=0 && i<loopclosure_edges.size() )
+        {
+            p_T_c = loopclosure_p_T_c[i];
+            return true;
+        }
+        return false;
+    }
+
+    // edge idx info
+    bool getEdgeIdxInfo( int i, std::pair<int,int>& p )
+    {
+        bool status;
+        if( i>=0 && i<loopclosure_edges.size() ) {
+            p = loopclosure_edges[i];
+            return true;
+        }
+        return false;
+    }
 
 private:
     const ros::NodeHandle& nh;
@@ -151,6 +172,7 @@ private:
     std::mutex edge_mutex;
     vector<std::pair<int,int>> loopclosure_edges;
     vector<double> loopclosure_edges_goodness;
+    vector<Matrix4d> loopclosure_p_T_c;
 
 
     // Publish Marker

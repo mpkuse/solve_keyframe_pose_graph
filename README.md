@@ -1,4 +1,4 @@
-#Node for pose graph optimization.
+# Node for pose graph optimization.
 
 Defines 2 classes
 ### NodeDataManager:

@@ -56,7 +56,7 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 
 void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  )
 {
-    ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
+    // ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
     // Add a new edge ( 2 node*)
 
 
@@ -88,7 +88,7 @@ void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& ms
     // Unlock
     node_mutex.unlock();
 
-    cout <<  index_t_c << "<--->" << index_t_p << endl;
+    cout << "[NodeDataManager] Rcvd NapMsg " << index_t_c << "<--->" << index_t_p << endl;
     assert( t_c > t_p );
 
     std::pair<int,int> closure_edge;
@@ -98,6 +98,7 @@ void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& ms
     edge_mutex.lock();
     loopclosure_edges.push_back( closure_edge );
     loopclosure_edges_goodness.push_back( goodness );
+    loopclosure_p_T_c.push_back( p_T_c );
     edge_mutex.unlock();
 
 

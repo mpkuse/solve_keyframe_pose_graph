@@ -118,7 +118,7 @@ int main( int argc, char ** argv)
 
 
     // setup manager publishers threads
-    std::thread th1( periodic_print_len, manager );
+    // std::thread th1( periodic_print_len, manager );
     std::thread th2( periodic_publish, manager );
 
 
@@ -132,7 +132,7 @@ int main( int argc, char ** argv)
         loop_rate.sleep();
     }
 
-    th1.join();
+    // th1.join();
     th2.join();
 
     th_slam.join();
