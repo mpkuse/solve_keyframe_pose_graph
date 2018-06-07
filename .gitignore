@@ -1,0 +1,14 @@
+DUMP*
+other_seqs*
+tf.logs*
+tf2.logs*
+*.bak
+*.swp
+*.pyc
+*.dat
+*.pch
+*.npy
+*.npz
+*.g2o
+slam_data/*
+./scripts/*
