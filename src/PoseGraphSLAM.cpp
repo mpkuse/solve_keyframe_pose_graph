@@ -3,11 +3,38 @@
 PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager )
 {
     manager = _manager;
-
-
+    mutex_opt_vars = new std::mutex();
 }
 
+Matrix4d PoseGraphSLAM::getNodePose( int i )
+{
+    assert( i>=0 && i <opt_quat.size() );
+    mutex_opt_vars->lock();
+    Matrix4d w_T_cam;
+    PoseManipUtils::raw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
+    mutex_opt_vars->unlock();
+    return w_T_cam;
+}
 
+void PoseGraphSLAM::getAllNodePose( vector<Matrix4d>& w_T_ci )
+{
+    w_T_ci.clear();
+    for( int i=0 ; i<nNodes() ; i++ )
+    {
+        w_T_ci.push_back( getNodePose(i) );
+    }
+}
+
+int PoseGraphSLAM::nNodes()
+{
+    int n;
+    mutex_opt_vars->lock();
+    n = opt_quat.size();
+    mutex_opt_vars->unlock();
+    return n;
+}
+
+#define _DEBUG_LVL_optimize6DOF 1
 void PoseGraphSLAM::optimize6DOF()
 {
     Color::Modifier fg_red(Color::Code::FG_RED);
@@ -16,8 +43,7 @@ void PoseGraphSLAM::optimize6DOF()
     Color::Modifier fg_def(Color::Code::FG_DEFAULT);
 
 
-    vector<double*> opt_quat;
-    vector<double*> opt_t;
+
 
     int nodesize, old_nodesize;
     int edgesize, old_edgesize;
@@ -30,22 +56,23 @@ void PoseGraphSLAM::optimize6DOF()
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
     options.linear_solver_type = ceres::SPARSE_SCHUR;
-    options.minimizer_progress_to_stdout = true;
+    options.minimizer_progress_to_stdout = false;
     options.max_num_iterations = 5;
     ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
 
     while( ros::ok() )
     {
+        cout << "optimize6DOF():opt_quat.size()" <<  opt_quat.size() << endl;
         nodesize = manager->getNodeLen();
         edgesize = manager->getEdgeLen();
         // if new nodes are available add odometry edges
             //continue;
         if( nodesize > old_nodesize ) //==> new nodes
         {
-            cout << "New nodes (#" << nodesize - old_nodesize << ")\n" ;
+            cout << fg_blue << "New nodes (#" << nodesize - old_nodesize << ")\n" << fg_def ;
 
             // Add optimization variables
-            cout << "New Optimization Variables for node: ";
+            cout << fg_blue << "New Optimization Variables for nodes: ";
             for(int u=old_nodesize; u<nodesize ; u++ )
             {
                 cout << ", u="<< u ;
@@ -55,28 +82,34 @@ void PoseGraphSLAM::optimize6DOF()
                 Matrix4d w_M_u;
                 bool status0 = manager->getNodePose(u, w_M_u);
                 assert( status0 );
-                eigenmat_to_raw( w_M_u, __quat, __tran );
+                PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
 
-
+                mutex_opt_vars->lock();
                 opt_quat.push_back( __quat );
                 opt_t.push_back( __tran );
+                mutex_opt_vars->unlock();
 
                 problem.AddParameterBlock( __quat, 4 );
                 problem.SetParameterization( __quat,  quaternion_parameterization );
                 problem.AddParameterBlock( __tran, 3 );
             }
-            cout << endl;
+            cout << fg_def << endl;
 
 
+            //////////////////// Error from Odometry Edges //////////////////////
             // Add residue blocks for odometry
             for( int u=old_nodesize; u<nodesize ; u++ )
             {
+                #if _DEBUG_LVL_optimize6DOF >= 2
                 cout << fg_red << "Odometry Edge: " << fg_def;
+                #endif
                 for( int f=1 ; f<5 ; f++ )
                 {
                     if( u-f < 0 )
                         continue;
+                    #if _DEBUG_LVL_optimize6DOF >= 2
                     cout << u << "<-->" << u-f << "    ";
+                    #endif
 
                     Matrix4d w_M_u, w_M_umf;
                     bool status0 = manager->getNodePose(u, w_M_u);
@@ -85,6 +118,9 @@ void PoseGraphSLAM::optimize6DOF()
                     ceres::CostFunction * cost_function = SixDOFError::Create( w_M_u.inverse() * w_M_umf );
                     problem.AddResidualBlock( cost_function, NULL, opt_quat[u], opt_t[u],  opt_quat[u-f], opt_t[u-f] );
                 }
+                #if _DEBUG_LVL_optimize6DOF >= 2
+                cout << endl;
+                #endif
 
                 if( u==0 )
                 {
@@ -92,15 +128,19 @@ void PoseGraphSLAM::optimize6DOF()
                     problem.SetParameterBlockConstant(  opt_quat[0] );
                     problem.SetParameterBlockConstant(  opt_t[0]  );
                 }
-                cout << endl;
+
             }
         }
         else
         {
+            #if _DEBUG_LVL_optimize6DOF >= 3
             cout << "No new nodes\n";
+            #endif
         }
         old_nodesize = nodesize;
 
+
+        ///////////////////// Error from Loop Closure Edges //////////////////////////////
 
         // if new edges are available add loop edges
             //solve()
@@ -123,15 +163,20 @@ void PoseGraphSLAM::optimize6DOF()
 
 
                 ceres::CostFunction * cost_function = SixDOFError::Create( pTc );
-                problem.AddResidualBlock( cost_function, NULL, opt_quat[p.first], opt_t[p.first],  opt_quat[p.second], opt_t[p.second]  );
+                problem.AddResidualBlock( cost_function, NULL, opt_quat[p.first], opt_t[p.first],
+                                                                opt_quat[p.second], opt_t[p.second]  );
             }
 
             cout << "solve()\n";
+            mutex_opt_vars->lock();
             ceres::Solve( options, &problem, &summary );
+            mutex_opt_vars->unlock();
         }
         else
         {
+            #if _DEBUG_LVL_optimize6DOF >= 3
             cout << "No new loop closure edges\n";
+            #endif
         }
         old_edgesize = edgesize;
 
@@ -150,120 +195,4 @@ void PoseGraphSLAM::optimize6DOF()
         delete [] opt_t[i];
     }
 
-}
-
-
-
-
-///////////////// Pose compitation related helpers /////////////////
-
-void PoseGraphSLAM::raw_to_eigenmat( const double * quat, const double * t, Matrix4d& dstT )
-{
-  Quaterniond q = Quaterniond( quat[0], quat[1], quat[2], quat[3] );
-
-  dstT = Matrix4d::Zero();
-  dstT.topLeftCorner<3,3>() = q.toRotationMatrix();
-
-  dstT(0,3) = t[0];
-  dstT(1,3) = t[1];
-  dstT(2,3) = t[2];
-  dstT(3,3) = 1.0;
-}
-
-void PoseGraphSLAM::eigenmat_to_raw( const Matrix4d& T, double * quat, double * t)
-{
-  assert( T(3,3) == 1 );
-  Quaterniond q( T.topLeftCorner<3,3>() );
-  quat[0] = q.w();
-  quat[1] = q.x();
-  quat[2] = q.y();
-  quat[3] = q.z();
-  t[0] = T(0,3);
-  t[1] = T(1,3);
-  t[2] = T(2,3);
-}
-
-void PoseGraphSLAM::rawyprt_to_eigenmat( const double * ypr, const double * t, Matrix4d& dstT )
-{
-  dstT = Matrix4d::Identity();
-  Vector3d eigen_ypr;
-  eigen_ypr << ypr[0], ypr[1], ypr[2];
-  dstT.topLeftCorner<3,3>() = ypr2R( eigen_ypr );
-  dstT(0,3) = t[0];
-  dstT(1,3) = t[1];
-  dstT(2,3) = t[2];
-}
-
-void PoseGraphSLAM::eigenmat_to_rawyprt( const Matrix4d& T, double * ypr, double * t)
-{
-  assert( T(3,3) == 1 );
-  Vector3d T_cap_ypr = R2ypr( T.topLeftCorner<3,3>() );
-  ypr[0] = T_cap_ypr(0);
-  ypr[1] = T_cap_ypr(1);
-  ypr[2] = T_cap_ypr(2);
-
-  t[0] = T(0,3);
-  t[1] = T(1,3);
-  t[2] = T(2,3);
-}
-
-Vector3d PoseGraphSLAM::R2ypr( const Matrix3d& R)
-{
-  Eigen::Vector3d n = R.col(0);
-  Eigen::Vector3d o = R.col(1);
-  Eigen::Vector3d a = R.col(2);
-
-  Eigen::Vector3d ypr(3);
-  double y = atan2(n(1), n(0));
-  double p = atan2(-n(2), n(0) * cos(y) + n(1) * sin(y));
-  double r = atan2(a(0) * sin(y) - a(1) * cos(y), -o(0) * sin(y) + o(1) * cos(y));
-  ypr(0) = y;
-  ypr(1) = p;
-  ypr(2) = r;
-
-  return ypr / M_PI * 180.0;
-}
-
-
-Matrix3d PoseGraphSLAM::ypr2R( const Vector3d& ypr)
-{
-  double y = ypr(0) / 180.0 * M_PI;
-  double p = ypr(1) / 180.0 * M_PI;
-  double r = ypr(2) / 180.0 * M_PI;
-
-  // Eigen::Matrix<double, 3, 3> Rz;
-  Matrix3d Rz;
-  Rz << cos(y), -sin(y), 0,
-      sin(y), cos(y), 0,
-      0, 0, 1;
-
-  // Eigen::Matrix<double, 3, 3> Ry;
-  Matrix3d Ry;
-  Ry << cos(p), 0., sin(p),
-      0., 1., 0.,
-      -sin(p), 0., cos(p);
-
-  // Eigen::Matrix<double, 3, 3> Rx;
-  Matrix3d Rx;
-  Rx << 1., 0., 0.,
-      0., cos(r), -sin(r),
-      0., sin(r), cos(r);
-
-  return Rz * Ry * Rx;
-}
-
-void PoseGraphSLAM::prettyprintPoseMatrix( const Matrix4d& M )
-{
-  cout << "YPR      : " << R2ypr(  M.topLeftCorner<3,3>() ).transpose() << "; ";
-  cout << "Tx,Ty,Tz : " << M(0,3) << ", " << M(1,3) << ", " << M(2,3) << endl;
-}
-
-void PoseGraphSLAM::prettyprintPoseMatrix( const Matrix4d& M, string& return_string )
-{
-   Vector3d ypr;
-   ypr = R2ypr(  M.topLeftCorner<3,3>()  );
-
-  char __tmp[200];
-  snprintf( __tmp, 200, ":YPR=(%4.2f,%4.2f,%4.2f)  :TxTyTz=(%4.2f,%4.2f,%4.2f)",  ypr(0), ypr(1), ypr(2), M(0,3), M(1,3), M(2,3) );
-  return_string = string( __tmp );
 }

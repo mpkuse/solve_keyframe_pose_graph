@@ -78,6 +78,23 @@ void periodic_publish( const NodeDataManager * manager )
 }
 
 
+void periodic_publish_optimized_poses( const NodeDataManager * manager, const PoseGraphSLAM * slam )
+{
+    ros::Rate loop_rate(1);
+    while( ros::ok() )
+    {
+        vector<Matrix4d> optimized_w_T_ci;
+        slam->getAllNodePose( optimized_w_T_ci );
+        manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7 );
+        cout << "periodic_publish_optimized_poses: "<< optimized_w_T_ci.size() << endl;;
+
+        loop_rate.sleep();
+    }
+}
+
+
+
+
 int main( int argc, char ** argv)
 {
     ros::init(argc, argv, "keyframe_pose_graph_slam_noe");
@@ -112,7 +129,7 @@ int main( int argc, char ** argv)
 
 
     // another class for the core pose graph optimization
-    PoseGraphSLAM slam( manager );
+    PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
     std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
 
 
@@ -120,6 +137,8 @@ int main( int argc, char ** argv)
     // setup manager publishers threads
     // std::thread th1( periodic_print_len, manager );
     std::thread th2( periodic_publish, manager );
+    std::thread th3( periodic_publish_optimized_poses, manager, slam );
+
 
 
 
@@ -134,6 +153,7 @@ int main( int argc, char ** argv)
 
     // th1.join();
     th2.join();
+    th3.join();
 
     th_slam.join();
 

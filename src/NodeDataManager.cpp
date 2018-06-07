@@ -146,6 +146,23 @@ void NodeDataManager::publishLastNNodes( int n )
     }
 }
 
+
+void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
+{
+    visualization_msgs::Marker marker ;
+    init_camera_marker( marker, .6 );
+
+    for( int i=0 ; i<w_T_ci.size() ; i++ )
+    {
+        setpose_to_marker( w_T_ci[i], marker );
+        setcolor_to_marker( r,g,b, marker );
+        marker.id = i;
+        marker.ns = ns; //"opt_kf_pose";
+
+        pub_pgraph.publish( marker );
+    }
+}
+
 void NodeDataManager::publishLastNEdges( int n )
 {
     int start, end;

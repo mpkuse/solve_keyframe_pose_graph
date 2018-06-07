@@ -78,6 +78,10 @@ public:
     void setVisualizationPublisher( const ros::Publisher& pub );
     void publishLastNNodes( int n);
     void publishLastNEdges( int n );
+    // void publishNodes( vector<Matrix4d> w_T_ci );
+    void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
+
+
 
     // Public interface
     int getNodeLen()

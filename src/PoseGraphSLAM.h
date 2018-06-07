@@ -40,6 +40,8 @@
 #include "NodeDataManager.h"
 #include "ScreenColors.h"
 
+#include "pose_manip_utils/PoseManipUtils.h"
+
 using namespace std;
 using namespace Eigen;
 
@@ -52,23 +54,20 @@ public:
     // This is intended to be run in a separate thread.
     void optimize6DOF();
 
+    // Get the optimized pose at node i. This function is thread-safe
+    Matrix4d getNodePose( int i );
+    int nNodes();
+    void getAllNodePose( vector<Matrix4d>& vec_w_T_ci );
+
 private:
     //TODO leran how to correctly use atomic.
 
     const NodeDataManager * manager;
 
-
-    // TODO
-    // Consider moving these to a separate class and declare these functions static
-    void raw_to_eigenmat( const double * quat, const double * t, Matrix4d& dstT );
-    void eigenmat_to_raw( const Matrix4d& T, double * quat, double * t);
-    void rawyprt_to_eigenmat( const double * ypr, const double * t, Matrix4d& dstT );
-    void eigenmat_to_rawyprt( const Matrix4d& T, double * ypr, double * t);
-    Vector3d R2ypr( const Matrix3d& R);
-    Matrix3d ypr2R( const Vector3d& ypr);
-    void prettyprintPoseMatrix( const Matrix4d& M );
-    void prettyprintPoseMatrix( const Matrix4d& M, string& return_string );
-
+    // Optimization variables
+    std::mutex * mutex_opt_vars;
+    vector<double*> opt_quat;
+    vector<double*> opt_t;
 
 
 
@@ -81,6 +80,10 @@ class SixDOFError
 public:
     SixDOFError( const Matrix4d& _observed__c1_T_c2 ) : observed__c1_T_c2( _observed__c1_T_c2 )
     {
+        double a[10], b[10];
+        PoseManipUtils::eigenmat_to_rawyprt(  observed__c1_T_c2, a, b );
+        observed_c1_ypr_c2 << a[0], a[1], a[2];
+        observed_c1_t_c2 << b[0], b[1], b[2];
     }
 
     // q1, t1 : w_T_c1
@@ -109,12 +112,12 @@ public:
         M = c1_T_c2.topLeftCorner(3,3);
         Matrix<T,3,1> ypr = R2ypr( M );
 
-        residue[0] = c1_T_c2(0,3);
-        residue[1] = c1_T_c2(1,3);
-        residue[2] = c1_T_c2(2,3);
-        residue[3] = ypr(0,0);
-        residue[4] = ypr(1,0);
-        residue[5] = ypr(2,0);
+        residue[0] = c1_T_c2(0,3) - T(observed_c1_t_c2(0));
+        residue[1] = c1_T_c2(1,3) - T(observed_c1_t_c2(1));
+        residue[2] = c1_T_c2(2,3) - T(observed_c1_t_c2(2));
+        residue[3] = ypr(0,0) - T(observed_c1_ypr_c2(0));
+        residue[4] = ypr(1,0) - T(observed_c1_ypr_c2(1));;
+        residue[5] = ypr(2,0) - T(observed_c1_ypr_c2(2));;
 
         return true;
     }
@@ -150,4 +153,6 @@ private:
     }
 
     Matrix4d observed__c1_T_c2;
+    Vector3d observed_c1_ypr_c2;
+    Vector3d observed_c1_t_c2;
 };

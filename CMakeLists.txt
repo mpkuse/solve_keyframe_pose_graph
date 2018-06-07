@@ -53,5 +53,6 @@ add_executable( keyframe_pose_graph_slam
         src/keyframe_pose_graph_slam_node.cpp
         src/NodeDataManager.cpp
         src/PoseGraphSLAM.cpp
+        src/pose_manip_utils/PoseManipUtils.cpp
         )
 target_link_libraries( keyframe_pose_graph_slam  ${OpenCV_LIBRARIES} ${catkin_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}  ${CERES_LIBRARIES} )
