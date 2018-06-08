@@ -26,6 +26,34 @@ static void PoseManipUtils::eigenmat_to_raw( const Matrix4d& T, double * quat, d
   t[2] = T(2,3);
 }
 
+
+static void PoseManipUtils::raw_xyzw_to_eigenmat( const double * quat, const double * t, Matrix4d& dstT )
+{
+  Quaterniond q = Quaterniond( quat[3], quat[0], quat[1], quat[2] );
+
+  dstT = Matrix4d::Zero();
+  dstT.topLeftCorner<3,3>() = q.toRotationMatrix();
+
+  dstT(0,3) = t[0];
+  dstT(1,3) = t[1];
+  dstT(2,3) = t[2];
+  dstT(3,3) = 1.0;
+}
+
+static void PoseManipUtils::eigenmat_to_raw_xyzw( const Matrix4d& T, double * quat, double * t)
+{
+  assert( T(3,3) == 1 );
+  Quaterniond q( T.topLeftCorner<3,3>() );
+  quat[3] = q.w();
+  quat[0] = q.x();
+  quat[1] = q.y();
+  quat[2] = q.z();
+  t[0] = T(0,3);
+  t[1] = T(1,3);
+  t[2] = T(2,3);
+}
+
+
 static void PoseManipUtils::rawyprt_to_eigenmat( const double * ypr, const double * t, Matrix4d& dstT )
 {
   dstT = Matrix4d::Identity();

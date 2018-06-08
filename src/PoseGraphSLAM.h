@@ -94,6 +94,10 @@ public:
         PoseManipUtils::eigenmat_to_rawyprt(  observed__c1_T_c2, a, b );
         observed_c1_ypr_c2 << a[0], a[1], a[2];
         observed_c1_t_c2 << b[0], b[1], b[2];
+
+        double c[10], d[10];
+        PoseManipUtils::eigenmat_to_raw( observed__c1_T_c2, c, d );
+        observed_c1_q_c2 = Quaterniond( c[0], c[1], c[2], c[3] )
     }
 
     // q1, t1 : w_T_c1
@@ -101,6 +105,10 @@ public:
     template <typename T>
     bool operator() ( const T* const q1, const T* const t1,   const T* const q2, const T* const t2, T* residue ) const
     {
+
+
+        ///////////// OLD implementation /////////////
+
         // q1,t1 ---> w_T_c1
         Matrix<T,4,4> w_T_c1;
         Quaternion<T> quat1( q1[0], q1[1], q1[2], q1[3] );
@@ -122,9 +130,9 @@ public:
         M = c1_T_c2.topLeftCorner(3,3);
         Matrix<T,3,1> ypr = R2ypr( M );
 
-        residue[0] = c1_T_c2(0,3) - T(observed_c1_t_c2(0));
-        residue[1] = c1_T_c2(1,3) - T(observed_c1_t_c2(1));
-        residue[2] = c1_T_c2(2,3) - T(observed_c1_t_c2(2));
+        residue[0] = c1_T_c2(0,3) - T(observed__c1_T_c2(0,3));
+        residue[1] = c1_T_c2(1,3) - T(observed__c1_T_c2(1,3));
+        residue[2] = c1_T_c2(2,3) - T(observed__c1_T_c2(2,3));
         residue[3] = NormalizeAngle( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(10.);
         residue[4] = NormalizeAngle( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(10.);
         residue[5] = NormalizeAngle( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(10.);
@@ -178,5 +186,6 @@ private:
 
     Matrix4d observed__c1_T_c2;
     Vector3d observed_c1_ypr_c2;
+    Quaterniond observed_c1_q_c2;
     Vector3d observed_c1_t_c2;
 };

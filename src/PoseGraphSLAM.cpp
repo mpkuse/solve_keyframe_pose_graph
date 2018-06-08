@@ -79,8 +79,8 @@ void PoseGraphSLAM::optimize6DOF()
             cout << fg_blue << "New Optimization Variables for nodes: " << old_nodesize << " to " << nodesize-1 << endl;;
             for(int u=old_nodesize; u<nodesize ; u++ )
             {
-                // cout << ", u="<< u ;
-                cout << "old_nodesize="<< old_nodesize << " u="<<u <<";\n";
+                cout << ", u="<< u ;
+                // cout << "old_nodesize="<< old_nodesize << " u="<<u <<";\n";
                 double * __quat = new double[4];
                 double * __tran = new double[3];
 
@@ -148,7 +148,7 @@ void PoseGraphSLAM::optimize6DOF()
                 #if _DEBUG_LVL_optimize6DOF >= 2
                 cout << fg_red << "Odometry Edge: " << fg_def;
                 #endif
-                for( int f=1 ; f<5 ; f++ )
+                for( int f=1 ; f<6 ; f++ )
                 {
                     if( u-f < 0 )
                         continue;
@@ -161,7 +161,7 @@ void PoseGraphSLAM::optimize6DOF()
                     bool status1 = manager->getNodePose( u-f, w_M_umf );
                     assert( status0 && status1 );
                     ceres::CostFunction * cost_function = SixDOFError::Create( w_M_u.inverse() * w_M_umf );
-                    problem.AddResidualBlock( cost_function, NULL, opt_quat[u], opt_t[u],  opt_quat[u-f], opt_t[u-f] );
+                    problem.AddResidualBlock( cost_function, loss_function, opt_quat[u], opt_t[u],  opt_quat[u-f], opt_t[u-f] );
                 }
                 #if _DEBUG_LVL_optimize6DOF >= 2
                 cout << endl;
@@ -219,9 +219,9 @@ void PoseGraphSLAM::optimize6DOF()
             // mutex_opt_vars->lock();
             ceres::Solve( options, &problem, &summary );
             // mutex_opt_vars->unlock();
-            // cout << summary.FullReport() << endl;
-            cout << summary.BriefReport() << endl;
-            cout << "Solve() took " << summary.total_time_in_seconds << endl;
+            cout << summary.FullReport() << endl;
+            // cout << summary.BriefReport() << endl;
+            cout << "Solve() took " << summary.total_time_in_seconds << " sec"<< endl;
             cout << "Poses are Optimized from 0 to "<< old_nodesize << endl;
             cout << "New nodes in manager which are not yet taken here from idx "<< old_nodesize << " to "<< manager->getNodeLen() << endl;
         }

@@ -21,4 +21,9 @@ public:
     static Matrix3d ypr2R( const Vector3d& ypr);
     static void prettyprintPoseMatrix( const Matrix4d& M );
     static void prettyprintPoseMatrix( const Matrix4d& M, string& return_string );
+
+
+    static void raw_xyzw_to_eigenmat( const double * quat, const double * t, Matrix4d& dstT );
+    static void eigenmat_to_raw_xyzw( const Matrix4d& T, double * quat, double * t);
+
 };
