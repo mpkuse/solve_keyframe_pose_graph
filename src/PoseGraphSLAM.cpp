@@ -45,7 +45,7 @@ void PoseGraphSLAM::optimize6DOF()
 
 
 
-    int nodesize, old_nodesize;
+    int nodesize, old_nodesize; //even though this says size, it is actually indices. Consider renaming. TODO
     int edgesize, old_edgesize;
     old_nodesize = manager->getNodeLen();
     old_edgesize = manager->getEdgeLen();
@@ -55,14 +55,18 @@ void PoseGraphSLAM::optimize6DOF()
     // Set Solver Options
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
-    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    // options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+
     options.minimizer_progress_to_stdout = false;
     options.max_num_iterations = 5;
+
+
     ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
+    ceres::LossFunction * loss_function = new ceres::CauchyLoss(1.0);
 
     while( ros::ok() )
     {
-        cout << "optimize6DOF():opt_quat.size()" <<  opt_quat.size() << endl;
         nodesize = manager->getNodeLen();
         edgesize = manager->getEdgeLen();
         // if new nodes are available add odometry edges
@@ -71,18 +75,59 @@ void PoseGraphSLAM::optimize6DOF()
         {
             cout << fg_blue << "New nodes (#" << nodesize - old_nodesize << ")\n" << fg_def ;
 
-            // Add optimization variables
-            cout << fg_blue << "New Optimization Variables for nodes: ";
+            ////////////////////////// Add optimization variables ///////////////////////
+            cout << fg_blue << "New Optimization Variables for nodes: " << old_nodesize << " to " << nodesize-1 << endl;;
             for(int u=old_nodesize; u<nodesize ; u++ )
             {
-                cout << ", u="<< u ;
+                // cout << ", u="<< u ;
+                cout << "old_nodesize="<< old_nodesize << " u="<<u <<";\n";
                 double * __quat = new double[4];
                 double * __tran = new double[3];
+
+
                 // init optimization variables w_T_cam
-                Matrix4d w_M_u;
-                bool status0 = manager->getNodePose(u, w_M_u);
-                assert( status0 );
-                PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
+                // if( true )
+                if( old_nodesize == 0 )
+                {   // Original code: Set the initial guess as the VIO poses.
+                    // This is note correct if solve() has changed some of the poses in the past. Best is to rely only on relative poses from VIO
+                    Matrix4d w_M_u;
+                    bool status0 = manager->getNodePose(u, w_M_u);
+                    assert( status0 );
+                    PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
+                }
+                else
+                {
+                    // M : uncorrected poses
+                    // T : corrected poses
+
+                    // Note:
+                    // Say in the previous run 0-248 are optimized and there are new nodes
+                    // from 249 to 290 whose VIO exists but not yet taken into ceres.
+                    // wTM_260 = w_T_248 * 248_M_260
+                    //         = w_T_248 * 248_M_w * w_M_260
+                    //         = w_T_248 * w_M_280.inv() * w_M_260
+
+                    // Getting the relative pose between current last corrected one
+                    Matrix4d w_M_last;
+                    bool status0 = manager->getNodePose( old_nodesize-1, w_M_last );
+
+                    Matrix4d w_M_u;
+                    bool status1 = manager->getNodePose(u, w_M_u);
+
+                    assert( status0 && status1 );
+                    Matrix4d last_M_u = w_M_last.inverse() * w_M_u;
+
+
+                    // Getting pose of last corrected one (in world frame)
+                    Matrix4d w_T_last;
+                    PoseManipUtils::raw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
+
+                    Matrix4d w_TM_u = w_T_last * last_M_u;
+
+                    PoseManipUtils::eigenmat_to_raw( w_TM_u, __quat, __tran );
+
+                }
+
 
                 mutex_opt_vars->lock();
                 opt_quat.push_back( __quat );
@@ -146,7 +191,7 @@ void PoseGraphSLAM::optimize6DOF()
             //solve()
         if( edgesize > old_edgesize )
         {
-            cout << "New Loop Closure Edges (#" << edgesize - old_edgesize << ")\n" ;
+            cout << fg_green << "New Loop Closure Edges (#" << edgesize - old_edgesize << ")\n" << fg_def;
 
             for( int u=old_edgesize ; u<edgesize ; u++ )
             {
@@ -155,22 +200,30 @@ void PoseGraphSLAM::optimize6DOF()
                 Matrix4d pTc;
                 bool status1 = manager->getEdgePose( u, pTc );
 
-                cout << "Add Loop Closure "<< u << " : " << p.first << "<-->" << p.second << endl;
                 assert( status0 && status1 );
                 assert( p.first >=0  && p.second >=0 );
                 assert( p.first < opt_quat.size() );
                 assert(  p.second < opt_quat.size() );
 
+                cout << fg_green << "Add Loop Closure "<< u << " : " << p.first << "<-->" << p.second << " | ";
+                string _tmp;
+                PoseManipUtils::prettyprintPoseMatrix( pTc, _tmp );
+                cout << _tmp <<  fg_def << endl;
 
                 ceres::CostFunction * cost_function = SixDOFError::Create( pTc );
-                problem.AddResidualBlock( cost_function, NULL, opt_quat[p.first], opt_t[p.first],
+                problem.AddResidualBlock( cost_function, loss_function, opt_quat[p.first], opt_t[p.first],
                                                                 opt_quat[p.second], opt_t[p.second]  );
             }
 
             cout << "solve()\n";
-            mutex_opt_vars->lock();
+            // mutex_opt_vars->lock();
             ceres::Solve( options, &problem, &summary );
-            mutex_opt_vars->unlock();
+            // mutex_opt_vars->unlock();
+            // cout << summary.FullReport() << endl;
+            cout << summary.BriefReport() << endl;
+            cout << "Solve() took " << summary.total_time_in_seconds << endl;
+            cout << "Poses are Optimized from 0 to "<< old_nodesize << endl;
+            cout << "New nodes in manager which are not yet taken here from idx "<< old_nodesize << " to "<< manager->getNodeLen() << endl;
         }
         else
         {

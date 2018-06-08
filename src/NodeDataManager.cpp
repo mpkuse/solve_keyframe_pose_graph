@@ -114,6 +114,13 @@ void NodeDataManager::setVisualizationPublisher( const ros::Publisher& pub )
   pub_pgraph = pub;
 }
 
+void NodeDataManager::setPathPublisher( const ros::Publisher& pub )
+{
+  // usually was "/mish/pose_nodes"
+  pub_path_opt = pub;
+}
+
+
 
 void NodeDataManager::publishLastNNodes( int n )
 {
@@ -162,6 +169,37 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
         pub_pgraph.publish( marker );
     }
 }
+
+void NodeDataManager::publishPath( vector<Matrix4d> w_T_ci  )
+{
+    nav_msgs::Path path;
+    path.header.stamp = ros::Time::now();
+    path.header.frame_id = "world";
+
+    for( int i=0 ; i<w_T_ci.size() ; i++ )
+    {
+        geometry_msgs::PoseStamped pose_stamped;
+        pose_stamped.header = path.header;  //TODO. set correct timestamp at each
+
+        Quaterniond quat( w_T_ci[i].topLeftCorner<3,3>() );
+
+
+        pose_stamped.pose.orientation.w = quat.w();
+        pose_stamped.pose.orientation.x = quat.x();
+        pose_stamped.pose.orientation.y = quat.y();
+        pose_stamped.pose.orientation.z = quat.z();
+
+        pose_stamped.pose.position.x = w_T_ci[i](0,3);
+        pose_stamped.pose.position.y = w_T_ci[i](1,3);
+        pose_stamped.pose.position.z = w_T_ci[i](2,3);
+
+        path.poses.push_back( pose_stamped );
+
+
+        pub_path_opt.publish( path );
+    }
+}
+
 
 void NodeDataManager::publishLastNEdges( int n )
 {

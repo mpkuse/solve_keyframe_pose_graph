@@ -70,8 +70,8 @@ void periodic_publish( const NodeDataManager * manager )
     ros::Rate loop_rate(1);
     while( ros::ok() )
     {
-        manager->publishLastNNodes(20);
-        manager->publishLastNEdges(20);
+        manager->publishLastNNodes(50);
+        manager->publishLastNEdges(50);
 
         loop_rate.sleep();
     }
@@ -80,13 +80,36 @@ void periodic_publish( const NodeDataManager * manager )
 
 void periodic_publish_optimized_poses( const NodeDataManager * manager, const PoseGraphSLAM * slam )
 {
-    ros::Rate loop_rate(1);
+    ros::Rate loop_rate(20);
     while( ros::ok() )
     {
         vector<Matrix4d> optimized_w_T_ci;
         slam->getAllNodePose( optimized_w_T_ci );
+
+        // Collect additional poses which are not yet added to pose graph optimization
+        // cout << "[PeriodicPublish] optimized_w_T_ci.size()=" << optimized_w_T_ci.size() << " ";
+        // cout << "manager->getNodeLen()="<<manager->getNodeLen() << endl;
+        if( manager->getNodeLen() > optimized_w_T_ci.size() && optimized_w_T_ci.size() > 0 ) {
+            Matrix4d w_T_last = optimized_w_T_ci[ optimized_w_T_ci.size() - 1 ]; // optimized pose for last corrected node
+            Matrix4d w_M_last;
+            manager->getNodePose(  optimized_w_T_ci.size() - 1,  w_M_last ); // ger VIO pose of the last corrected. This is use to get relative pose of current node wrt this node
+            for( int a= optimized_w_T_ci.size() ; a<manager->getNodeLen() ; a++ )
+            {
+                Matrix4d w_M_c; // VIO pose of current.
+                manager->getNodePose( a, w_M_c );
+
+                Matrix4d last_M_c; // pose of current wrt last infered from VIO
+                last_M_c = w_M_last.inverse() * w_M_c;
+
+                Matrix4d int__w_TM_c = w_T_last * last_M_c  ; // using the corrected one for 0->last and using VIO for last->current.
+                optimized_w_T_ci.push_back( int__w_TM_c );
+            }
+        }
+        /// end of additonal poses
+
+
         manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7 );
-        cout << "periodic_publish_optimized_poses: "<< optimized_w_T_ci.size() << endl;;
+        // manager->publishPath( optimized_w_T_ci );
 
         loop_rate.sleep();
     }
@@ -105,7 +128,8 @@ int main( int argc, char ** argv)
     NodeDataManager * manager = new NodeDataManager(nh);
 
     //--- Camera VIO Pose ---//
-    string keyframes_vio_camerapose_topic =  string("/vins_estimator/camera_pose");
+    // string keyframes_vio_camerapose_topic =  string("/vins_estimator/camera_pose");
+    string keyframes_vio_camerapose_topic =  string("/vins_estimator/keyframe_pose");
     ROS_INFO( "Subscribe to %s", keyframes_vio_camerapose_topic.c_str() );
     ros::Subscriber sub_odometry = nh.subscribe( keyframes_vio_camerapose_topic, 1000,&NodeDataManager::camera_pose_callback, manager );
 
@@ -120,12 +144,18 @@ int main( int argc, char ** argv)
 
 
     // Setup publishers
-    // ---
-    string marker_topic = string( "visualization_keyframe_pose_graph_slam");
+    //--- Marker ---//
+    string marker_topic = string( "visualization_marker");
     ROS_INFO( "Publish to %s", marker_topic.c_str() );
-    ros::Publisher pub = nh.advertise<visualization_msgs::Marker>( marker_topic , 100 );
+    ros::Publisher pub = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
     manager->setVisualizationPublisher( pub );
 
+
+    //--- Optimzied Path Publisher ---//
+    string opt_path_topic = string( "opt_path");
+    ROS_INFO( "Publish to %s", opt_path_topic.c_str() );
+    ros::Publisher pub_path = nh.advertise<nav_msgs::Path>( opt_path_topic , 1000 );
+    manager->setPathPublisher( pub_path );
 
 
     // another class for the core pose graph optimization

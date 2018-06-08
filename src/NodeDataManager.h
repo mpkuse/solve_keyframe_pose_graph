@@ -76,10 +76,15 @@ public:
 
     // public Publishing functions
     void setVisualizationPublisher( const ros::Publisher& pub );
+    void setPathPublisher( const ros::Publisher& pub );
+
+
     void publishLastNNodes( int n);
     void publishLastNEdges( int n );
     // void publishNodes( vector<Matrix4d> w_T_ci );
     void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
+    void publishPath( vector<Matrix4d> w_T_ci  );
+
 
 
 
@@ -181,6 +186,7 @@ private:
 
     // Publish Marker
     ros::Publisher pub_pgraph;
+    ros::Publisher pub_path_opt;
 
     // Utilities
     int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp );

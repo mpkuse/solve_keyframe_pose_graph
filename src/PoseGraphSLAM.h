@@ -73,7 +73,17 @@ private:
 
 };
 
-
+template <typename T>
+T NormalizeAngle(const T& angle_degrees) {
+	// if this non-linearity can be removed the angular problem (for constant translation) is a linear problem.
+	// the l1-norm iros2014 paper by Luca Corlone suggest to use another latent variable for this and penalize it to be near zero.
+  if (angle_degrees > T(180.0))
+  	return angle_degrees - T(360.0);
+  else if (angle_degrees < T(-180.0))
+  	return angle_degrees + T(360.0);
+  else
+  	return angle_degrees;
+};
 
 class SixDOFError
 {
@@ -115,9 +125,23 @@ public:
         residue[0] = c1_T_c2(0,3) - T(observed_c1_t_c2(0));
         residue[1] = c1_T_c2(1,3) - T(observed_c1_t_c2(1));
         residue[2] = c1_T_c2(2,3) - T(observed_c1_t_c2(2));
-        residue[3] = ypr(0,0) - T(observed_c1_ypr_c2(0));
-        residue[4] = ypr(1,0) - T(observed_c1_ypr_c2(1));;
-        residue[5] = ypr(2,0) - T(observed_c1_ypr_c2(2));;
+        residue[3] = NormalizeAngle( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(10.);
+        residue[4] = NormalizeAngle( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(10.);
+        residue[5] = NormalizeAngle( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(10.);
+        // residue[3] = ( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(5.);
+        // residue[4] = ( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(5.);
+        // residue[5] = ( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(5.);
+
+
+        //// Dynamic Co-variance Scaling
+        // T res_ = residue[0]*residue[0]+residue[1]*residue[1]+residue[2]*residue[2]+residue[3]*residue[3]+residue[4]*residue[4]+residue[5]*residue[5];
+        // T m = T( 2.*5.) / ( T(5.) * T(0.01) * res_ );
+        // residue[0] *= m;
+        // residue[1] *= m;
+        // residue[2] *= m;
+        // residue[3] *= m;
+        // residue[4] *= m;
+        // residue[5] *= m;
 
         return true;
     }
