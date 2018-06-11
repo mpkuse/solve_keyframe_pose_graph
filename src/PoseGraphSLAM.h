@@ -93,22 +93,51 @@ public:
         double a[10], b[10];
         PoseManipUtils::eigenmat_to_rawyprt(  observed__c1_T_c2, a, b );
         observed_c1_ypr_c2 << a[0], a[1], a[2];
-        observed_c1_t_c2 << b[0], b[1], b[2];
+        // observed_c1_t_c2 << b[0], b[1], b[2];
 
         double c[10], d[10];
         PoseManipUtils::eigenmat_to_raw( observed__c1_T_c2, c, d );
-        observed_c1_q_c2 = Quaterniond( c[0], c[1], c[2], c[3] )
+        observed_c1_q_c2 = Quaterniond( c[0], c[1], c[2], c[3] );
+        observed_c1_t_c2 << d[0], d[1], d[2];
     }
 
     // q1, t1 : w_T_c1
     // q2, t2 : w_T_c2
     template <typename T>
-    bool operator() ( const T* const q1, const T* const t1,   const T* const q2, const T* const t2, T* residue ) const
+    bool operator() ( const T* const q1, const T* const t1,   const T* const q2, const T* const t2, T* residue_ptr ) const
     {
+
+        // q1,t1 --> w_T_c1
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_1( t1 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_1( q1 );
+
+        // q2,t2 --> w_T_c2
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_2( t2 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_2( q2 );
+
+        // relative transforms between the 2 frames
+        Quaternion<T> q_1_inverse = q_1.conjugate();
+        Quaternion<T> q_12_estimated = q_1_inverse * q_2;
+        Matrix<T,3,1> p_12_estimated = q_1_inverse * (p_2 - p_1);
+
+        // compute error between orientations estimates
+        Quaternion<T> delta_q = observed_c1_q_c2.cast<T>() * q_12_estimated.conjugate();
+        Matrix<T,3,1> delta_t = observed_c1_t_c2.cast<T>() - p_12_estimated;
+
+        // Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
+        // residuals.block(0,0,  3,1) = delta_t;
+        // residuals.block(3,0,  3,1) = T(2.0) * delta_q.vec();
+        residue_ptr[0] = delta_t[0,0];
+        residue_ptr[1] = delta_t[1,0];
+        residue_ptr[2] = delta_t[2,0];
+        residue_ptr[3] = T(2.0) * delta_q.x();
+        residue_ptr[4] = T(2.0) * delta_q.y();
+        residue_ptr[5] = T(2.0) * delta_q.z();
+        return true;
 
 
         ///////////// OLD implementation /////////////
-
+/*
         // q1,t1 ---> w_T_c1
         Matrix<T,4,4> w_T_c1;
         Quaternion<T> quat1( q1[0], q1[1], q1[2], q1[3] );
@@ -130,12 +159,12 @@ public:
         M = c1_T_c2.topLeftCorner(3,3);
         Matrix<T,3,1> ypr = R2ypr( M );
 
-        residue[0] = c1_T_c2(0,3) - T(observed__c1_T_c2(0,3));
-        residue[1] = c1_T_c2(1,3) - T(observed__c1_T_c2(1,3));
-        residue[2] = c1_T_c2(2,3) - T(observed__c1_T_c2(2,3));
-        residue[3] = NormalizeAngle( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(10.);
-        residue[4] = NormalizeAngle( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(10.);
-        residue[5] = NormalizeAngle( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(10.);
+        residue_ptr[0] = c1_T_c2(0,3) - T(observed__c1_T_c2(0,3));
+        residue_ptr[1] = c1_T_c2(1,3) - T(observed__c1_T_c2(1,3));
+        residue_ptr[2] = c1_T_c2(2,3) - T(observed__c1_T_c2(2,3));
+        residue_ptr[3] = NormalizeAngle( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(10.);
+        residue_ptr[4] = NormalizeAngle( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(10.);
+        residue_ptr[5] = NormalizeAngle( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(10.);
         // residue[3] = ( ypr(0,0) - T(observed_c1_ypr_c2(0)) ) / T(5.);
         // residue[4] = ( ypr(1,0) - T(observed_c1_ypr_c2(1)) ) / T(5.);
         // residue[5] = ( ypr(2,0) - T(observed_c1_ypr_c2(2)) ) / T(5.);
@@ -151,7 +180,7 @@ public:
         // residue[4] *= m;
         // residue[5] *= m;
 
-        return true;
+        return true;*/
     }
 
 
@@ -187,5 +216,6 @@ private:
     Matrix4d observed__c1_T_c2;
     Vector3d observed_c1_ypr_c2;
     Quaterniond observed_c1_q_c2;
-    Vector3d observed_c1_t_c2;
+    // Vector3d observed_c1_t_c2;
+    Matrix<double,3,1> observed_c1_t_c2;
 };

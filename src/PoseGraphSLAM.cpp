@@ -11,7 +11,7 @@ Matrix4d PoseGraphSLAM::getNodePose( int i )
     assert( i>=0 && i <opt_quat.size() );
     mutex_opt_vars->lock();
     Matrix4d w_T_cam;
-    PoseManipUtils::raw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
+    PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
     mutex_opt_vars->unlock();
     return w_T_cam;
 }
@@ -58,11 +58,12 @@ void PoseGraphSLAM::optimize6DOF()
     // options.linear_solver_type = ceres::SPARSE_SCHUR;
     options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
 
-    options.minimizer_progress_to_stdout = false;
-    options.max_num_iterations = 5;
+    options.minimizer_progress_to_stdout = true;
+    options.max_num_iterations = 8;
 
 
-    ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
+    // ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
+    ceres::LocalParameterization * eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
     ceres::LossFunction * loss_function = new ceres::CauchyLoss(1.0);
 
     while( ros::ok() )
@@ -93,7 +94,8 @@ void PoseGraphSLAM::optimize6DOF()
                     Matrix4d w_M_u;
                     bool status0 = manager->getNodePose(u, w_M_u);
                     assert( status0 );
-                    PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
+                    // PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
+                    PoseManipUtils::eigenmat_to_raw_xyzw( w_M_u, __quat, __tran );
                 }
                 else
                 {
@@ -120,11 +122,13 @@ void PoseGraphSLAM::optimize6DOF()
 
                     // Getting pose of last corrected one (in world frame)
                     Matrix4d w_T_last;
-                    PoseManipUtils::raw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
+                    // PoseManipUtils::raw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
+                    PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
 
                     Matrix4d w_TM_u = w_T_last * last_M_u;
 
-                    PoseManipUtils::eigenmat_to_raw( w_TM_u, __quat, __tran );
+                    // PoseManipUtils::eigenmat_to_raw( w_TM_u, __quat, __tran );
+                    PoseManipUtils::eigenmat_to_raw_xyzw( w_TM_u, __quat, __tran );
 
                 }
 
@@ -135,7 +139,8 @@ void PoseGraphSLAM::optimize6DOF()
                 mutex_opt_vars->unlock();
 
                 problem.AddParameterBlock( __quat, 4 );
-                problem.SetParameterization( __quat,  quaternion_parameterization );
+                // problem.SetParameterization( __quat,  quaternion_parameterization );
+                problem.SetParameterization( __quat,  eigenquaternion_parameterization );
                 problem.AddParameterBlock( __tran, 3 );
             }
             cout << fg_def << endl;
@@ -160,7 +165,9 @@ void PoseGraphSLAM::optimize6DOF()
                     bool status0 = manager->getNodePose(u, w_M_u);
                     bool status1 = manager->getNodePose( u-f, w_M_umf );
                     assert( status0 && status1 );
-                    ceres::CostFunction * cost_function = SixDOFError::Create( w_M_u.inverse() * w_M_umf );
+
+                    w_M_umf =  w_M_u.inverse() * w_M_umf ;
+                    ceres::CostFunction * cost_function = SixDOFError::Create( w_M_umf);
                     problem.AddResidualBlock( cost_function, loss_function, opt_quat[u], opt_t[u],  opt_quat[u-f], opt_t[u-f] );
                 }
                 #if _DEBUG_LVL_optimize6DOF >= 2

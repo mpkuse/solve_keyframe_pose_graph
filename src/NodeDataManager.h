@@ -89,80 +89,13 @@ public:
 
 
     // Public interface
-    int getNodeLen()
-    {
-        node_mutex.lock();
-        int n = node_pose.size();
-        node_mutex.unlock();
-        return n;
-    }
+    int getNodeLen();
+    int getEdgeLen();
+    bool getNodePose( int i, Matrix4d& w_T_cam );
+    bool getNodeCov( int i, Matrix<double,6,6>& cov );
+    bool getEdgePose( int i, Matrix4d& p_T_c );
+    bool getEdgeIdxInfo( int i, std::pair<int,int>& p );
 
-    int getEdgeLen()
-    {
-        edge_mutex.lock();
-        int n = loopclosure_edges.size();
-        edge_mutex.unlock();
-        return n;
-    }
-
-    // returns w_T_cam
-    bool getNodePose( int i, Matrix4d& w_T_cam )
-    {
-        bool status;
-        node_mutex.lock();
-        if( i>=0 && i< node_pose.size() )
-        {
-            w_T_cam = node_pose[i];
-            status = true;
-        }
-        else
-        {
-            status = false;
-        }
-        node_mutex.unlock();
-
-        return status;
-    }
-
-    bool getNodeCov( int i, Matrix<double,6,6>& cov )
-    {
-        bool status;
-        node_mutex.lock();
-        if( i>=0 && i< node_pose_covariance.size() )
-        {
-            cov = node_pose_covariance[i];
-            status = true;
-        }
-        else
-        {
-            status = false;
-        }
-        node_mutex.unlock();
-
-        return status;
-    }
-
-    // return p_T_c
-    bool getEdgePose( int i, Matrix4d& p_T_c )
-    {
-        if( i>=0 && i<loopclosure_edges.size() )
-        {
-            p_T_c = loopclosure_p_T_c[i];
-            return true;
-        }
-        return false;
-    }
-
-    // edge idx info
-    bool getEdgeIdxInfo( int i, std::pair<int,int>& p )
-    {
-        bool status;
-        if( i>=0 && i<loopclosure_edges.size() ) {
-            p = loopclosure_edges[i];
-            return true;
-        }
-        return false;
-    }
 
 private:
     const ros::NodeHandle& nh;

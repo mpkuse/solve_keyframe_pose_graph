@@ -70,6 +70,7 @@ void periodic_publish( const NodeDataManager * manager )
     ros::Rate loop_rate(1);
     while( ros::ok() )
     {
+        cout << "publishLastNNodes\n";
         manager->publishLastNNodes(50);
         manager->publishLastNEdges(50);
 
@@ -159,15 +160,15 @@ int main( int argc, char ** argv)
 
 
     // another class for the core pose graph optimization
-    PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
-    std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    // PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
+    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
 
 
 
     // setup manager publishers threads
     // std::thread th1( periodic_print_len, manager );
     std::thread th2( periodic_publish, manager );
-    std::thread th3( periodic_publish_optimized_poses, manager, slam );
+    // std::thread th3( periodic_publish_optimized_poses, manager, slam );
 
 
 
@@ -183,9 +184,9 @@ int main( int argc, char ** argv)
 
     // th1.join();
     th2.join();
-    th3.join();
+    // th3.join();
 
-    th_slam.join();
+    // th_slam.join();
 
     return 0;
 }

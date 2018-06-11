@@ -12,7 +12,7 @@ NodeDataManager::NodeDataManager( const ros::NodeHandle& _nh ): nh(_nh)
 
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
-    // ROS_INFO( "NodeDataManager::camera_pose_callback");
+    ROS_INFO( "NodeDataManager::camera_pose_callback");
 
 
 
@@ -383,3 +383,80 @@ int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_st
 
 ////////////////////////// optimize() ///////////////////////////
 // intended to be run in a separate thread.
+
+
+////////////////// Public interfaces for data... thread safe
+int NodeDataManager::getNodeLen()
+{
+    node_mutex.lock();
+    int n = node_pose.size();
+    node_mutex.unlock();
+    return n;
+}
+
+int NodeDataManager::getEdgeLen()
+{
+    edge_mutex.lock();
+    int n = loopclosure_edges.size();
+    edge_mutex.unlock();
+    return n;
+}
+
+// returns w_T_cam
+bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
+{
+    bool status;
+    node_mutex.lock();
+    if( i>=0 && i< node_pose.size() )
+    {
+        w_T_cam = node_pose[i];
+        status = true;
+    }
+    else
+    {
+        status = false;
+    }
+    node_mutex.unlock();
+
+    return status;
+}
+
+bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
+{
+    bool status;
+    node_mutex.lock();
+    if( i>=0 && i< node_pose_covariance.size() )
+    {
+        cov = node_pose_covariance[i];
+        status = true;
+    }
+    else
+    {
+        status = false;
+    }
+    node_mutex.unlock();
+
+    return status;
+}
+
+// return p_T_c
+bool NodeDataManager::getEdgePose( int i, Matrix4d& p_T_c )
+{
+    if( i>=0 && i<loopclosure_edges.size() )
+    {
+        p_T_c = loopclosure_p_T_c[i];
+        return true;
+    }
+    return false;
+}
+
+// edge idx info
+bool NodeDataManager::getEdgeIdxInfo( int i, std::pair<int,int>& p )
+{
+    bool status;
+    if( i>=0 && i<loopclosure_edges.size() ) {
+        p = loopclosure_edges[i];
+        return true;
+    }
+    return false;
+}
