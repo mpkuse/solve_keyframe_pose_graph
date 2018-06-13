@@ -4,15 +4,17 @@ PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager )
 {
     manager = _manager;
     mutex_opt_vars = new std::mutex();
+    solved_until = 0;
 }
 
+// Return reference instead of a copy
 Matrix4d PoseGraphSLAM::getNodePose( int i )
 {
     assert( i>=0 && i <opt_quat.size() );
-    mutex_opt_vars->lock();
+    // mutex_opt_vars->lock();
     Matrix4d w_T_cam;
     PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
-    mutex_opt_vars->unlock();
+    // mutex_opt_vars->unlock();
     return w_T_cam;
 }
 
@@ -33,6 +35,21 @@ int PoseGraphSLAM::nNodes()
     mutex_opt_vars->unlock();
     return n;
 }
+
+
+void PoseGraphSLAM::opt_pose( int i, Matrix4d& out_w_T_nodei )
+{
+    assert( i < nNodes() );
+
+    // qi,ti --> w_T_ci
+    Eigen::Map<const Eigen::Quaternion<double> > q_1( opt_quat[i] );
+    Eigen::Map<const Eigen::Matrix<double,3,1> > p_1( opt_t[i] );
+
+    out_w_T_nodei = Matrix4d::Identity();
+    out_w_T_nodei.topLeftCorner<3,3>() = q_1.toRotationMatrix();
+    out_w_T_nodei.col(3).head(3) = p_1;
+}
+
 
 #define _DEBUG_LVL_optimize6DOF 1
 void PoseGraphSLAM::optimize6DOF()
@@ -58,13 +75,20 @@ void PoseGraphSLAM::optimize6DOF()
     // options.linear_solver_type = ceres::SPARSE_SCHUR;
     options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
 
-    options.minimizer_progress_to_stdout = true;
+    options.minimizer_progress_to_stdout = false;
     options.max_num_iterations = 8;
 
 
     // ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
     ceres::LocalParameterization * eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
     ceres::LossFunction * loss_function = new ceres::CauchyLoss(1.0);
+
+
+    // There are 3 parts :
+    // while( )
+    //      step-1: Add optimization variables (if new nodes available with manager)
+    //      step-2: Add Odometry Edges (if new available)
+    //      step-3: Add Loop Edges (if new loops available)
 
     while( ros::ok() )
     {
@@ -80,7 +104,7 @@ void PoseGraphSLAM::optimize6DOF()
             cout << fg_blue << "New Optimization Variables for nodes: " << old_nodesize << " to " << nodesize-1 << endl;;
             for(int u=old_nodesize; u<nodesize ; u++ )
             {
-                cout << ", u="<< u ;
+                // cout << ", u="<< u ;
                 // cout << "old_nodesize="<< old_nodesize << " u="<<u <<";\n";
                 double * __quat = new double[4];
                 double * __tran = new double[3];
@@ -225,9 +249,10 @@ void PoseGraphSLAM::optimize6DOF()
             cout << "solve()\n";
             // mutex_opt_vars->lock();
             ceres::Solve( options, &problem, &summary );
-            // mutex_opt_vars->unlock();
-            cout << summary.FullReport() << endl;
-            // cout << summary.BriefReport() << endl;
+            solved_until = nodesize;
+            // // mutex_opt_vars->unlock();
+            // cout << summary.FullReport() << endl;
+            cout << summary.BriefReport() << endl;
             cout << "Solve() took " << summary.total_time_in_seconds << " sec"<< endl;
             cout << "Poses are Optimized from 0 to "<< old_nodesize << endl;
             cout << "New nodes in manager which are not yet taken here from idx "<< old_nodesize << " to "<< manager->getNodeLen() << endl;

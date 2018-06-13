@@ -5,15 +5,20 @@
 
 NodeDataManager::NodeDataManager( const ros::NodeHandle& _nh ): nh(_nh)
 {
+node_pose.reserve(10000);
+node_timestamps.reserve(10000);
+node_pose_covariance.reserve(10000);
 
+loopclosure_edges.reserve(10000);
+loopclosure_edges_goodness.reserve(10000);
+loopclosure_p_T_c.reserve(10000);
 }
 
 
 
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
-    ROS_INFO( "NodeDataManager::camera_pose_callback");
-
+    // ROS_INFO( "NodeDataManager::camera_pose_callback");
 
 
     // timestamp
@@ -33,6 +38,8 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
     w_T_cam(1,3) = msg->pose.pose.position.y;
     w_T_cam(2,3) = msg->pose.pose.position.z;
     w_T_cam(3,3) = 1.0;
+    // cout << "camera_pose_callback: " << node_pose.size() << " " << PoseManipUtils::prettyprintMatrix4d( w_T_cam ) << endl;
+
 
     // co-variance
     Matrix<double, 6,6 > Cov;
@@ -51,6 +58,10 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
     node_pose.push_back( w_T_cam );
     node_pose_covariance.push_back( Cov );
     node_mutex.unlock();
+
+
+
+
 
 }
 
@@ -141,9 +152,10 @@ void NodeDataManager::publishLastNNodes( int n )
 
     for( int i=start ; i<end ; i++ )
     {
-        node_mutex.lock();
+        // node_mutex.lock();
         Matrix4d w_T_c = node_pose[i];
-        node_mutex.unlock();
+        // node_mutex.unlock();
+        // cout << "publish "<< i << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
         setpose_to_marker( w_T_c, marker );
         setcolor_to_marker( 0.0, 1.0, 0.0, marker );
         marker.id = i;
@@ -152,6 +164,99 @@ void NodeDataManager::publishLastNNodes( int n )
         pub_pgraph.publish( marker );
     }
 }
+
+void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
+{
+    // this is a cost effective way to visualize camera path
+    visualization_msgs::Marker marker;
+    init_line_marker( marker );
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.scale.x *= 0.01;
+
+    std_msgs::ColorRGBA C1;
+    C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
+
+    marker.points.clear();
+    marker.colors.clear();
+    for( int i=0 ; i<w_T_ci.size() ; i++ )
+    {
+        geometry_msgs::Point pt;
+        pt.x = (w_T_ci[i])(0,3);
+        pt.y = (w_T_ci[i])(1,3);
+        pt.z = (w_T_ci[i])(2,3);
+
+        marker.points.push_back( pt );
+        marker.colors.push_back( C1 );
+    }
+
+    pub_pgraph.publish( marker );
+
+
+}
+
+
+void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual  )
+{
+    assert( idx_partition < w_T_ci.size() );
+
+
+    // this is a cost effective way to visualize camera path
+    visualization_msgs::Marker marker;
+    init_line_marker( marker );
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.scale.x = 0.02;
+
+    std_msgs::ColorRGBA C1;
+    C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
+    std_msgs::ColorRGBA C2;
+    C2.r = r1; C2.g=g1; C2.b=b1; C2.a = 0.8;
+
+    marker.points.clear();
+    marker.colors.clear();
+    marker.id = 0;
+    marker.ns = ns;
+    for( int i=0 ; i< idx_partition ; i++ )
+    {
+        geometry_msgs::Point pt;
+        pt.x = (w_T_ci[i])(0,3);
+        pt.y = (w_T_ci[i])(1,3);
+        pt.z = (w_T_ci[i])(2,3);
+
+        marker.points.push_back( pt );
+        marker.colors.push_back( C1 );
+    }
+
+    for( int i=idx_partition; i<w_T_ci.size() ; i++ )
+    {
+        geometry_msgs::Point pt;
+        pt.x = (w_T_ci[i])(0,3);
+        pt.y = (w_T_ci[i])(1,3);
+        pt.z = (w_T_ci[i])(2,3);
+
+        marker.points.push_back( pt );
+        marker.colors.push_back( C2 );
+    }
+
+    pub_pgraph.publish( marker );
+
+    if( enable_camera_visual )
+    {
+        int last_idx = w_T_ci.size() - 1;
+        visualization_msgs::Marker marker2 ;
+        init_camera_marker( marker2, 10 );
+        setpose_to_marker( w_T_ci[last_idx], marker2 );
+        setcolor_to_marker( r,g,b, marker2 );
+        marker2.scale.x = 0.02;
+        marker2.id = 0;
+        marker2.ns = ns+string("_cam_visual");
+        pub_pgraph.publish( marker2 );
+    }
+
+}
+
+
 
 
 void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
@@ -163,6 +268,38 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
     {
         setpose_to_marker( w_T_ci[i], marker );
         setcolor_to_marker( r,g,b, marker );
+        marker.id = i;
+        marker.ns = ns; //"opt_kf_pose";
+
+        pub_pgraph.publish( marker );
+    }
+}
+
+
+
+
+
+void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 )
+{
+    assert( idx_partition < w_T_ci.size() );
+
+    visualization_msgs::Marker marker ;
+    init_camera_marker( marker, .6 );
+
+    for( int i=0 ; i<idx_partition ; i++ )
+    {
+        setpose_to_marker( w_T_ci[i], marker );
+        setcolor_to_marker( r,g,b, marker );
+        marker.id = i;
+        marker.ns = ns; //"opt_kf_pose";
+
+        pub_pgraph.publish( marker );
+    }
+
+    for( int i=idx_partition ; i<w_T_ci.size() ; i++ )
+    {
+        setpose_to_marker( w_T_ci[i], marker );
+        setcolor_to_marker( r1,g1,b1, marker );
         marker.id = i;
         marker.ns = ns; //"opt_kf_pose";
 
@@ -251,10 +388,13 @@ void NodeDataManager::init_camera_marker( visualization_msgs::Marker& marker, fl
     //  marker.id = i;
     //  marker.ns = "camerapose_visual";
 
-     marker.scale.x = 0.005; //width of line-segments
+     marker.scale.x = 0.003; //width of line-segments
      float __vcam_width = 0.07*cam_size;
      float __vcam_height = 0.04*cam_size;
-     float __z = 0.05;
+     float __z = 0.1*cam_size;
+
+
+
 
      marker.points.clear();
      geometry_msgs::Point pt;
@@ -323,6 +463,33 @@ void NodeDataManager::setcolor_to_marker( float r, float g, float b, visualizati
     marker.color.r = r;
     marker.color.g = g;
     marker.color.b = b;
+}
+
+
+void NodeDataManager::init_line_marker( visualization_msgs::Marker &marker )
+{
+    marker.header.frame_id = "world";
+    marker.header.stamp = ros::Time::now();
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.color.a = .8; // Don't forget to set the alpha!
+    marker.type = visualization_msgs::Marker::LINE_LIST;
+
+    marker.scale.x = 0.005;
+
+    marker.points.clear();
+
+    //// Done . no need to edit firther
+    marker.pose.position.x = 0.;
+    marker.pose.position.y = 0.;
+    marker.pose.position.z = 0.;
+    marker.pose.orientation.x = 0.;
+    marker.pose.orientation.y = 0.;
+    marker.pose.orientation.z = 0.;
+    marker.pose.orientation.w = 1.;
+    // marker.id = i;
+    // marker.ns = "camerapose_visual";
+    marker.color.r = 0.2;marker.color.b = 0.;marker.color.g = 0.;
+
 }
 
 void NodeDataManager::init_line_marker( visualization_msgs::Marker &marker, const Vector3d& p1, const Vector3d& p2 )
@@ -406,7 +573,7 @@ int NodeDataManager::getEdgeLen()
 bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
 {
     bool status;
-    node_mutex.lock();
+    // node_mutex.lock(); //since this is readonly dont need a lock
     if( i>=0 && i< node_pose.size() )
     {
         w_T_cam = node_pose[i];
@@ -416,7 +583,7 @@ bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
     {
         status = false;
     }
-    node_mutex.unlock();
+    // node_mutex.unlock();
 
     return status;
 }
@@ -424,7 +591,7 @@ bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
 bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
 {
     bool status;
-    node_mutex.lock();
+    // node_mutex.lock(); Since this is readonly dont need a lock
     if( i>=0 && i< node_pose_covariance.size() )
     {
         cov = node_pose_covariance[i];
@@ -434,7 +601,7 @@ bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
     {
         status = false;
     }
-    node_mutex.unlock();
+    // node_mutex.unlock();
 
     return status;
 }

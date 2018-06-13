@@ -59,8 +59,13 @@ public:
     int nNodes();
     void getAllNodePose( vector<Matrix4d>& vec_w_T_ci );
 
+
+    void opt_pose( int i, Matrix4d& );
+
+    int solvedUntil() { return solved_until; } // returns the node index until which solve() has operated. Thread-safe with atomics
+
 private:
-    //TODO leran how to correctly use atomic.
+    atomic<int> solved_until;
 
     const NodeDataManager * manager;
 
@@ -121,18 +126,19 @@ public:
         Matrix<T,3,1> p_12_estimated = q_1_inverse * (p_2 - p_1);
 
         // compute error between orientations estimates
-        Quaternion<T> delta_q = observed_c1_q_c2.cast<T>() * q_12_estimated.conjugate();
-        Matrix<T,3,1> delta_t = observed_c1_t_c2.cast<T>() - p_12_estimated;
+        Quaternion<T> delta_q = q_12_estimated.conjugate() * observed_c1_q_c2.cast<T>();
+        Matrix<T,3,1> delta_t = q_12_estimated.conjugate() * ( observed_c1_t_c2.cast<T>() - p_12_estimated );
 
-        // Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
-        // residuals.block(0,0,  3,1) = delta_t;
-        // residuals.block(3,0,  3,1) = T(2.0) * delta_q.vec();
-        residue_ptr[0] = delta_t[0,0];
-        residue_ptr[1] = delta_t[1,0];
-        residue_ptr[2] = delta_t[2,0];
-        residue_ptr[3] = T(2.0) * delta_q.x();
-        residue_ptr[4] = T(2.0) * delta_q.y();
-        residue_ptr[5] = T(2.0) * delta_q.z();
+
+        Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
+        residuals.block(0,0,  3,1) = delta_t;
+        residuals.block(3,0,  3,1) = T(2.0) * delta_q.vec();
+        // residue_ptr[0] = delta_t(0,0);
+        // residue_ptr[1] = delta_t(1,0);
+        // residue_ptr[2] = delta_t(2,0);
+        // residue_ptr[3] = T(2.0) * delta_q.x();
+        // residue_ptr[4] = T(2.0) * delta_q.y();
+        // residue_ptr[5] = T(2.0) * delta_q.z();
         return true;
 
 

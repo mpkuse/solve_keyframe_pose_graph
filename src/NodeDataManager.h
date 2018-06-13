@@ -41,6 +41,7 @@
 #include <nap/NapMsg.h>
 #include <nav_msgs/Odometry.h>
 #include <visualization_msgs/Marker.h>
+#include <std_msgs/ColorRGBA.h>
 
 
 #include <Eigen/Dense>
@@ -50,6 +51,8 @@ using namespace Eigen;
 
 using namespace std;
 using namespace Eigen;
+
+#include "pose_manip_utils/PoseManipUtils.h"
 
 
 
@@ -83,6 +86,12 @@ public:
     void publishLastNEdges( int n );
     // void publishNodes( vector<Matrix4d> w_T_ci );
     void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
+    void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 );
+
+    void publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
+    void publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual=true  );
+
+
     void publishPath( vector<Matrix4d> w_T_ci  );
 
 
@@ -118,8 +127,8 @@ private:
 
 
     // Publish Marker
-    ros::Publisher pub_pgraph;
-    ros::Publisher pub_path_opt;
+    ros::Publisher pub_pgraph; //< Marker
+    ros::Publisher pub_path_opt; //< Path
 
     // Utilities
     int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp );
@@ -128,6 +137,7 @@ private:
     void setcolor_to_marker( float r, float g, float b, visualization_msgs::Marker& marker  );
 
     void init_line_marker( visualization_msgs::Marker &marker, const Vector3d& p1, const Vector3d& p2 );
+    void init_line_marker( visualization_msgs::Marker &marker );
 
 
 };

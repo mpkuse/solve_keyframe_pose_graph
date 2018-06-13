@@ -65,28 +65,129 @@ void periodic_print_len( const NodeDataManager * manager )
 }
 
 
-void periodic_publish( const NodeDataManager * manager )
+void periodic_publish_VIO( const NodeDataManager * manager )
 {
-    ros::Rate loop_rate(1);
+    ros::Rate loop_rate(20);
     while( ros::ok() )
     {
-        cout << "publishLastNNodes\n";
-        manager->publishLastNNodes(50);
-        manager->publishLastNEdges(50);
+        // cout << "publishLastNNodes\n";
+        manager->publishLastNNodes(10);
+        manager->publishLastNEdges(10);
 
         loop_rate.sleep();
     }
 }
 
 
+// also looks at slam->solvedUntil() to ot repeatedly update the entire path
+void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, const PoseGraphSLAM * slam )
+{
+    ros::Rate loop_rate0(20);
+    int prev_solved_until = 0, solved_until=0;
+
+    vector<Matrix4d> optimized_w_T_ci;
+    while( ros::ok() )
+    {
+
+        if( manager->getNodeLen() == 0 ) {
+            loop_rate0.sleep();
+            continue;
+        }
+        solved_until = slam->solvedUntil();
+
+
+        // Solved() just executed, so get the latest values of all the nodes, (ie. clearup existing values)
+        if( solved_until > prev_solved_until )
+        {
+            optimized_w_T_ci.clear();
+
+            int L = slam->nNodes();
+            for( int i=0 ; i<L ; i++ )
+            {
+                Matrix4d M;
+                slam->opt_pose( i, M );
+                optimized_w_T_ci.push_back( M );
+            }
+        }
+
+
+        // fill in VIO for the rest
+        if( manager->getNodeLen() > optimized_w_T_ci.size() )
+        {
+            if( optimized_w_T_ci.size() == 0 ) // if ceres::Solve() has not executed even once.
+            {
+                for( int a=0 ; a<manager->getNodeLen() ; a++ )
+                {
+                    Matrix4d w_M_c; // VIO pose of current.
+                    manager->getNodePose( a, w_M_c );
+                    optimized_w_T_ci.push_back( w_M_c ); // put the VIO poses.
+                }
+            }
+            else
+            {
+                Matrix4d w_T_last = optimized_w_T_ci[ optimized_w_T_ci.size() - 1 ]; // optimized pose for last corrected node
+                Matrix4d w_M_last;
+                manager->getNodePose(  optimized_w_T_ci.size() - 1,  w_M_last ); // ger VIO pose of the last corrected. This is use to get relative pose of current node wrt this node
+                for( int a= optimized_w_T_ci.size() ; a<manager->getNodeLen() ; a++ )
+                {
+                    Matrix4d w_M_c; // VIO pose of current.
+                    manager->getNodePose( a, w_M_c );
+
+                    Matrix4d last_M_c; // pose of current wrt last infered from VIO
+                    last_M_c = w_M_last.inverse() * w_M_c;
+
+                    Matrix4d int__w_TM_c = w_T_last * last_M_c  ; // using the corrected one for 0->last and using VIO for last->current.
+                    optimized_w_T_ci.push_back( int__w_TM_c );
+                }
+            }
+        }
+
+
+
+        // manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7 );
+        // manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
+        // manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7  );
+        manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
+
+        loop_rate0.sleep();
+        prev_solved_until = solved_until;
+    }
+    return ;
+
+
+}
+
+// Simple function to brute-force publish all nodes
 void periodic_publish_optimized_poses( const NodeDataManager * manager, const PoseGraphSLAM * slam )
 {
+    ros::Rate loop_rate0(20);
+    while( ros::ok() )
+    {
+        vector<Matrix4d> optimized_w_T_ci;
+        optimized_w_T_ci.clear();
+
+        int L = slam->nNodes();
+        for( int i=0 ; i<L ; i++ )
+        {
+            Matrix4d M;
+            slam->opt_pose( i, M );
+            optimized_w_T_ci.push_back( M );
+        }
+
+        manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7 );
+
+        loop_rate0.sleep();
+    }
+    return ;
+
+
     ros::Rate loop_rate(20);
     while( ros::ok() )
     {
         vector<Matrix4d> optimized_w_T_ci;
-        slam->getAllNodePose( optimized_w_T_ci );
+        slam->getAllNodePose( optimized_w_T_ci ); // these will be only the poses which are in slam's list. There could be some additional nodes not in slam's list since the ceres::Solve() takes a long time.
 
+        /*
         // Collect additional poses which are not yet added to pose graph optimization
         // cout << "[PeriodicPublish] optimized_w_T_ci.size()=" << optimized_w_T_ci.size() << " ";
         // cout << "manager->getNodeLen()="<<manager->getNodeLen() << endl;
@@ -105,7 +206,7 @@ void periodic_publish_optimized_poses( const NodeDataManager * manager, const Po
                 Matrix4d int__w_TM_c = w_T_last * last_M_c  ; // using the corrected one for 0->last and using VIO for last->current.
                 optimized_w_T_ci.push_back( int__w_TM_c );
             }
-        }
+        }*/
         /// end of additonal poses
 
 
@@ -129,8 +230,8 @@ int main( int argc, char ** argv)
     NodeDataManager * manager = new NodeDataManager(nh);
 
     //--- Camera VIO Pose ---//
-    // string keyframes_vio_camerapose_topic =  string("/vins_estimator/camera_pose");
-    string keyframes_vio_camerapose_topic =  string("/vins_estimator/keyframe_pose");
+    string keyframes_vio_camerapose_topic =  string("/vins_estimator/camera_pose");
+    // string keyframes_vio_camerapose_topic =  string("/vins_estimator/keyframe_pose");
     ROS_INFO( "Subscribe to %s", keyframes_vio_camerapose_topic.c_str() );
     ros::Subscriber sub_odometry = nh.subscribe( keyframes_vio_camerapose_topic, 1000,&NodeDataManager::camera_pose_callback, manager );
 
@@ -160,15 +261,16 @@ int main( int argc, char ** argv)
 
 
     // another class for the core pose graph optimization
-    // PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
-    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
+    std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
 
 
 
     // setup manager publishers threads
     // std::thread th1( periodic_print_len, manager );
-    std::thread th2( periodic_publish, manager );
+    // std::thread th2( periodic_publish_VIO, manager );
     // std::thread th3( periodic_publish_optimized_poses, manager, slam );
+    std::thread th3( periodic_publish_optimized_poses_smart, manager, slam );
 
 
 
@@ -179,14 +281,16 @@ int main( int argc, char ** argv)
     while(ros::ok())
     {
         ros::spinOnce();
+
+
         loop_rate.sleep();
     }
 
     // th1.join();
-    th2.join();
-    // th3.join();
+    // th2.join();
+    th3.join();
 
-    // th_slam.join();
+    th_slam.join();
 
     return 0;
 }
