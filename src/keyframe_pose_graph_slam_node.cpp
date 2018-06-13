@@ -88,7 +88,7 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
     vector<Matrix4d> optimized_w_T_ci;
     while( ros::ok() )
     {
-
+        cout << "periodic_publish_optimized_poses_smart\n";
         if( manager->getNodeLen() == 0 ) {
             loop_rate0.sleep();
             continue;
@@ -148,6 +148,13 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
         // manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
         // manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7  );
         manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
+
+
+        // in nav_msgs::Path only publish last 5
+        int end = optimized_w_T_ci.size();
+        int start = max( 0, end - 5 );
+        manager->publishPath( optimized_w_T_ci, start, end );
+
 
         loop_rate0.sleep();
         prev_solved_until = solved_until;

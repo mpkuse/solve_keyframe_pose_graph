@@ -198,7 +198,7 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
 
 void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual  )
 {
-    assert( idx_partition < w_T_ci.size() );
+    assert( idx_partition <= w_T_ci.size() );
 
 
     // this is a cost effective way to visualize camera path
@@ -281,7 +281,7 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
 
 void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 )
 {
-    assert( idx_partition < w_T_ci.size() );
+    assert( idx_partition <= w_T_ci.size() );
 
     visualization_msgs::Marker marker ;
     init_camera_marker( marker, .6 );
@@ -307,16 +307,26 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
     }
 }
 
-void NodeDataManager::publishPath( vector<Matrix4d> w_T_ci  )
+void NodeDataManager::publishPath( vector<Matrix4d> w_T_ci, int start, int end  )
 {
+
+    assert( start >=0 && start <= w_T_ci.size() && end >=0 && end <= w_T_ci.size() && start < end  );
+
+
     nav_msgs::Path path;
     path.header.stamp = ros::Time::now();
     path.header.frame_id = "world";
 
-    for( int i=0 ; i<w_T_ci.size() ; i++ )
+    for( int i=start ; i<end ; i++ )
     {
         geometry_msgs::PoseStamped pose_stamped;
-        pose_stamped.header = path.header;  //TODO. set correct timestamp at each
+        // pose_stamped.header = path.header;  //TODO. set correct timestamp at each
+
+        ros::Time stamp;
+        bool __status = getNodeTimestamp( i, stamp  );
+        assert( __status );
+        pose_stamped.header.stamp = stamp;
+        pose_stamped.header.frame_id = "world";
 
         Quaterniond quat( w_T_ci[i].topLeftCorner<3,3>() );
 
@@ -333,8 +343,13 @@ void NodeDataManager::publishPath( vector<Matrix4d> w_T_ci  )
         path.poses.push_back( pose_stamped );
 
 
-        pub_path_opt.publish( path );
     }
+    pub_path_opt.publish( path );
+}
+
+void NodeDataManager::publishPath( nav_msgs::Path path )
+{
+    pub_path_opt.publish( path );
 }
 
 
@@ -595,6 +610,24 @@ bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
     if( i>=0 && i< node_pose_covariance.size() )
     {
         cov = node_pose_covariance[i];
+        status = true;
+    }
+    else
+    {
+        status = false;
+    }
+    // node_mutex.unlock();
+
+    return status;
+}
+
+bool NodeDataManager::getNodeTimestamp( int i, ros::Time& stamp )
+{
+    bool status;
+    // node_mutex.lock(); Since this is readonly dont need a lock
+    if( i>=0 && i< node_timestamps.size() )
+    {
+        stamp = node_timestamps[i];
         status = true;
     }
     else

@@ -92,7 +92,8 @@ public:
     void publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual=true  );
 
 
-    void publishPath( vector<Matrix4d> w_T_ci  );
+    void publishPath( vector<Matrix4d> w_T_ci, int start, int end  );
+    void publishPath( nav_msgs::Path path );
 
 
 
@@ -102,6 +103,7 @@ public:
     int getEdgeLen();
     bool getNodePose( int i, Matrix4d& w_T_cam );
     bool getNodeCov( int i, Matrix<double,6,6>& cov );
+    bool getNodeTimestamp( int i, ros::Time& stamp );
     bool getEdgePose( int i, Matrix4d& p_T_c );
     bool getEdgeIdxInfo( int i, std::pair<int,int>& p );
 
