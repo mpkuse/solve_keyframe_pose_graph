@@ -48,7 +48,7 @@
   <build_depend>image_transport</build_depend>
   <build_depend>cv_bridge</build_depend>
 
-  <build_depend>nap</build_depend>
+  <build_depend>cerebro</build_depend>
 
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
@@ -57,7 +57,7 @@
   <run_depend>image_transport</run_depend>
   <run_depend>cv_bridge</run_depend>
 
-  <run_depend>nap</run_depend>
+  <run_depend>cerebro</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

@@ -38,7 +38,8 @@
 
 // ros messages
 #include <nav_msgs/Path.h>
-#include <nap/NapMsg.h>
+// #include <nap/NapMsg.h>
+#include <cerebro/LoopEdge.h>
 #include <nav_msgs/Odometry.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/ColorRGBA.h>
@@ -53,6 +54,7 @@ using namespace std;
 using namespace Eigen;
 
 #include "pose_manip_utils/PoseManipUtils.h"
+#include "cnpy/cnpy.h"
 
 
 
@@ -65,7 +67,8 @@ public:
 
     // Callbacks core
     void camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg );
-    void loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  );
+    // void loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  );
+    void loopclosure_pose_callback( const cerebro::LoopEdge::ConstPtr& msg  );
 
     // internal node queue length info
     void print_nodes_lengths()
@@ -88,6 +91,8 @@ public:
     void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
     void publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 );
 
+    void publishEdgesAsLineArray( int n );
+
     void publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b );
     void publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual=true  );
 
@@ -106,7 +111,15 @@ public:
     bool getNodeTimestamp( int i, ros::Time& stamp );
     bool getEdgePose( int i, Matrix4d& p_T_c );
     bool getEdgeIdxInfo( int i, std::pair<int,int>& p );
+    double getEdgeWeight( int i );
 
+
+    /// Will save the Variables `node_pose`, `node_timestamps`, `node_pose_covariance`; loopclosure_edges, loopclosure_edges_goodness, loopclosure_p_T_c
+    bool saveForDebug( const string& base_path );
+    bool loadFromDebug( const string& base_path, const vector<bool>& edge_mask ); //< Loads what saveForDebug() writes. edge_mask: a vector of 0s, 1s indicating if this edge has to be included or not. edge_mask.size() == 0 will load all
+
+    void reset_edge_info_data();
+    void reset_node_info_data();
 
 private:
     const ros::NodeHandle& nh;
@@ -141,5 +154,6 @@ private:
     void init_line_marker( visualization_msgs::Marker &marker, const Vector3d& p1, const Vector3d& p2 );
     void init_line_marker( visualization_msgs::Marker &marker );
 
+    void _print_info_on_npyarray( const cnpy::NpyArray& arr );
 
 };

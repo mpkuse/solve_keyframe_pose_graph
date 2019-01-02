@@ -150,3 +150,27 @@ static string PoseManipUtils::prettyprintMatrix4d( const Matrix4d& M )
   string return_string = string( __tmp );
   return return_string;
 }
+
+
+
+static string PoseManipUtils::prettyprintMatrix4d_YPR( const Matrix4d& M )
+{
+   Vector3d ypr;
+   ypr = R2ypr(  M.topLeftCorner<3,3>()  );
+
+  char __tmp[200];
+  snprintf( __tmp, 200, " YPR=(%4.2f,%4.2f,%4.2f) ",  ypr(0), ypr(1), ypr(2) );
+  string return_string = string( __tmp );
+  return return_string;
+}
+
+static string PoseManipUtils::prettyprintMatrix4d_t( const Matrix4d& M )
+{
+   Vector3d ypr;
+   ypr = R2ypr(  M.topLeftCorner<3,3>()  );
+
+  char __tmp[200];
+  snprintf( __tmp, 200, " TxTyTz=(%4.2f,%4.2f,%4.2f) ",  M(0,3), M(1,3), M(2,3) );
+  string return_string = string( __tmp );
+  return return_string;
+}

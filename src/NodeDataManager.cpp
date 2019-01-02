@@ -65,25 +65,77 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 
 }
 
-void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  )
+
+// void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  )
+// {
+//     // ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
+//     // Add a new edge ( 2 node*)
+//
+//
+//     ros::Time t_c = msg->c_timestamp;
+//     ros::Time t_p = msg->prev_timestamp;
+//     int op_mode = msg->op_mode;
+//     double goodness = (double)msg->goodness;
+//     assert( op_mode == 30 );
+//
+//     // retrive rel-pose  p_T_c
+//     Matrix4d p_T_c = Matrix4d::Zero();
+//     Quaterniond quat( msg->p_T_c.orientation.w, msg->p_T_c.orientation.x, msg->p_T_c.orientation.y, msg->p_T_c.orientation.z );
+//     p_T_c.topLeftCorner<3,3>() = quat.toRotationMatrix();
+//     p_T_c(0,3) = msg->p_T_c.position.x;
+//     p_T_c(1,3) = msg->p_T_c.position.y;
+//     p_T_c(2,3) = msg->p_T_c.position.z;
+//     p_T_c(3,3) = 1.0;
+//
+//
+//     // Lock
+//     node_mutex.lock() ;
+//
+//     // loop up t_c in node_timestamps[]
+//     int index_t_c = find_indexof_node(node_timestamps, t_c );
+//
+//     // loop up t_p in node_timestamps
+//     int index_t_p = find_indexof_node(node_timestamps, t_p );
+//
+//     // Unlock
+//     node_mutex.unlock();
+//
+//     cout << "[NodeDataManager] Rcvd NapMsg " << index_t_c << "<--->" << index_t_p << endl;
+//     assert( t_c > t_p );
+//
+//     std::pair<int,int> closure_edge;
+//     closure_edge.first = index_t_p;
+//     closure_edge.second = index_t_c;
+//
+//     edge_mutex.lock();
+//     loopclosure_edges.push_back( closure_edge );
+//     loopclosure_edges_goodness.push_back( goodness );
+//     loopclosure_p_T_c.push_back( p_T_c );
+//     edge_mutex.unlock();
+//
+//
+//
+// }
+
+void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::ConstPtr& msg  )
 {
     // ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
     // Add a new edge ( 2 node*)
 
 
-    ros::Time t_c = msg->c_timestamp;
-    ros::Time t_p = msg->prev_timestamp;
-    int op_mode = msg->op_mode;
-    double goodness = (double)msg->goodness;
-    assert( op_mode == 30 );
+    ros::Time t_c = msg->timestamp0;
+    ros::Time t_p = msg->timestamp1;
+    // int op_mode = msg->op_mode;
+    double goodness = (double)msg->weight;
+    // assert( op_mode == 30 );
 
     // retrive rel-pose  p_T_c
     Matrix4d p_T_c = Matrix4d::Zero();
-    Quaterniond quat( msg->p_T_c.orientation.w, msg->p_T_c.orientation.x, msg->p_T_c.orientation.y, msg->p_T_c.orientation.z );
+    Quaterniond quat( msg->pose_1T0.orientation.w, msg->pose_1T0.orientation.x, msg->pose_1T0.orientation.y, msg->pose_1T0.orientation.z );
     p_T_c.topLeftCorner<3,3>() = quat.toRotationMatrix();
-    p_T_c(0,3) = msg->p_T_c.position.x;
-    p_T_c(1,3) = msg->p_T_c.position.y;
-    p_T_c(2,3) = msg->p_T_c.position.z;
+    p_T_c(0,3) = msg->pose_1T0.position.x;
+    p_T_c(1,3) = msg->pose_1T0.position.y;
+    p_T_c(2,3) = msg->pose_1T0.position.z;
     p_T_c(3,3) = 1.0;
 
 
@@ -115,7 +167,6 @@ void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& ms
 
 
 }
-
 
 
 /////////////////// Publish
@@ -172,7 +223,9 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
     init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x *= 0.01;
+    marker.scale.x *= 2;
+    marker.ns = ns;
+
 
     std_msgs::ColorRGBA C1;
     C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
@@ -258,6 +311,55 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
 
 
 
+void NodeDataManager::publishEdgesAsLineArray( int n )
+{
+    int start, end;
+    edge_mutex.lock();
+    int len = loopclosure_edges.size();
+    edge_mutex.unlock();
+
+    if( n<= 0 )
+        start = 0;
+    else
+        start = max( 0, len-n );
+
+    end = len;
+
+    // make a line marker
+    visualization_msgs::Marker marker;
+    init_line_marker( marker );
+
+    for( int i=start; i<end ; i++ )
+    {
+        edge_mutex.lock();
+        int idx_node_prev = loopclosure_edges[i].first ;
+        int idx_node_curr = loopclosure_edges[i].second;
+        edge_mutex.unlock();
+
+        node_mutex.lock();
+        Vector3d w_t_prev = node_pose[ idx_node_prev ].col(3).head(3);
+        Vector3d w_t_curr = node_pose[ idx_node_curr ].col(3).head(3);
+        node_mutex.unlock();
+
+
+        geometry_msgs::Point pt;
+        pt.x = w_t_prev(0);
+        pt.y = w_t_prev(1);
+        pt.z = w_t_prev(2);
+        marker.points.push_back( pt );
+        pt.x = w_t_curr(0);
+        pt.y = w_t_curr(1);
+        pt.z = w_t_curr(2);
+        marker.points.push_back( pt );
+
+    }
+    marker.ns = "loop_closure_edges_ary";
+    marker.id = 0;
+    setcolor_to_marker( 0.0, 1.0, 0.2, marker );
+    marker.scale.x = 0.03;
+    pub_pgraph.publish( marker );
+
+}
 
 void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
 {
@@ -659,4 +761,272 @@ bool NodeDataManager::getEdgeIdxInfo( int i, std::pair<int,int>& p )
         return true;
     }
     return false;
+}
+
+
+double NodeDataManager::getEdgeWeight( int i )
+{
+    if( i>=0 && i<loopclosure_edges.size() ) {
+        return loopclosure_edges_goodness[i];
+    }
+    return -1.0;
+}
+
+
+
+////////////////////// Save Data to file for analysis //////////////
+void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
+{
+
+    // #Dimensions
+    cout << "arr.shape.size()" << arr.shape.size() << endl;
+
+    // X.shape
+    int raw_data_size = 1;
+    for( int i=0 ; i< arr.shape.size() ; i++ ){
+            cout << arr.shape[i] << ", ";
+            raw_data_size *= arr.shape[i];
+    }
+    cout << endl;
+
+    // Ordering
+    cout << "arr.fortran_order " << arr.fortran_order << endl;
+
+    // Raw data
+    double * loaded_data = (double*) arr.data;
+    for( int i=0 ; i<raw_data_size ; i++ )
+        cout << loaded_data[i] << " ";
+}
+
+void NodeDataManager::reset_edge_info_data()
+{
+    loopclosure_edges.clear();
+    loopclosure_edges_goodness.clear();
+    loopclosure_p_T_c.clear();
+}
+
+void NodeDataManager::reset_node_info_data()
+{
+    node_pose.clear();
+    node_timestamps.clear();
+    node_pose_covariance.clear();
+}
+
+bool NodeDataManager::loadFromDebug( const string& base_path, const vector<bool>& edge_mask )
+{
+    cout << "##########################################\n";
+    cout << " NodeDataManager::loadFromDebug : "<< base_path << endl;
+    cout << "##########################################\n";
+
+    cout << "edge_mask.size()="<< edge_mask.size() << endl;
+    for( int i=0 ; i<edge_mask.size() ; i++ )
+        cout << edge_mask[i];
+    cout << endl;
+
+    node_mutex.lock();
+    edge_mutex.lock();
+    reset_node_info_data();
+    reset_edge_info_data();
+
+    //
+    // Load Data on Nodes
+    // npz_t := std::map<std::string, NpyArray>;
+    cnpy::npz_t my_npz = cnpy::npz_load( base_path+"/graph_data.npz" );
+    // cout << "Contains files: \n";
+    // for( cnpy::npz_t::iterator i=my_npz.begin() ; i!= my_npz.end() ; i++ )
+    // {
+    //     cout << i->first << endl;
+    // }
+
+    reset_node_info_data();
+    for( int i=0 ; ; i++ )
+    {
+        if( my_npz.count(  "w_T_"+to_string(i) ) == 0  )
+            break;
+
+        // w_T_c
+        auto arr = my_npz[ "w_T_"+to_string(i) ];
+        // _print_info_on_npyarray( arr );
+        // Map<Matrix4d> w_T_c( (double*)arr.data );
+        Matrix4d w_T_c( (double*) arr.data );
+
+        node_pose.push_back( w_T_c );
+    }
+    cout << "Loaded " << node_pose.size() << " nodes" << endl;
+
+
+
+    //
+    // Load Data on Edges
+    reset_edge_info_data();
+
+
+
+    // a) Edge Idx
+    auto arr0 = my_npz[ "loopclosure_edges" ]; // this is of size 2E
+    auto arr1 = my_npz[ "loopclosure_edges_goodness" ]; // this is of size 2E
+    assert( arr0.shape.size() == 1 && arr1.shape.size() == 1 );
+    assert( arr0.shape[0]/2 == arr1.shape[0]);
+    int nloops = arr0.shape[0]/2;
+    cout << "There are "<< nloops << " loops\n";
+    int * loaded_data = (int*) arr0.data;
+
+    assert( edge_mask.size() == 0 || edge_mask.size() == nloops );
+
+    for( int i=0 ; i<nloops; i++ )
+    {
+        // cout <<i << " " << loaded_data[2*i] << "<-->" << loaded_data[2*i+1] << endl;
+        if( edge_mask.size() > 0 && edge_mask[i] == false )
+            continue;// dont load the edge if edge_mask has non zero size and mask is true.
+
+
+
+        std::pair<int,int> p;
+        p.first = loaded_data[2*i];
+        p.second = loaded_data[2*i+1];
+        this->loopclosure_edges.push_back( p );
+    }
+    // _print_info_on_npyarray( arr0 );
+
+
+    // b) Goodness
+    double * goodness_loaded_data = (double*) arr1.data;
+    for( int i=0 ; i<nloops ; i++ )
+    {
+        if( edge_mask.size() > 0 && edge_mask[i] == false )
+            continue;// dont load the edge if edge_mask has non zero size and mask is true.
+
+        this->loopclosure_edges_goodness.push_back( goodness_loaded_data[i] );
+    }
+
+
+    // c) p_T_c
+    for( int i=0 ; ; i++ )
+    {
+        if( my_npz.count( "p_T_c__"+to_string(i) ) == 0  )
+            break;
+
+        if( edge_mask.size() > 0 && edge_mask[i] == false )
+            continue;// dont load the edge if edge_mask has non zero size and mask is true.
+
+        auto arr_ed_pose = my_npz[  "p_T_c__"+to_string(i) ];
+
+        Matrix4d p_T_c( (double*)  arr_ed_pose.data );
+
+        this->loopclosure_p_T_c.push_back( p_T_c );
+    }
+    cout << "Loaded "<< loopclosure_p_T_c.size() << " relative poses for edges (computed)\n";
+
+    // assert( nloops == loopclosure_p_T_c.size() );
+
+    edge_mutex.unlock();
+    node_mutex.unlock();
+
+
+    // Display All
+    assert( loopclosure_edges.size() == loopclosure_edges_goodness.size() );
+    assert( loopclosure_edges.size() == loopclosure_p_T_c.size() );
+    for( int i=0 ; i<loopclosure_edges.size() ; i++ )
+    {
+        cout << i << " " << loopclosure_edges[i].first << "<-->" << loopclosure_edges[i].second << " ";
+        cout << "weight=" << loopclosure_edges_goodness[i] << " ";
+        cout << "p_T_c="<< PoseManipUtils::prettyprintMatrix4d( loopclosure_p_T_c[i] );
+        cout << endl;
+    }
+    cout << "Done Loading Pose Graph\n";
+
+}
+
+bool NodeDataManager::saveForDebug( const string& base_path )
+{
+    cout << "##########################################\n";
+    cout << " NodeDataManager::saveForDebug : "<< base_path << endl;
+    cout << "##########################################\n";
+
+
+    // ofstream myfile;
+    // myfile.open( base_path+"/test.txt" );
+    // myfile << "Test file\n";
+    // myfile.close();
+
+
+    //
+    // Write Info on Nodes
+    vector<unsigned int> shape;
+
+    /* // examples with cnpy
+    // Remember than eigen internally stores data as column major,
+    cout << "node_pose_0\n" << node_pose[0] << endl;
+    shape = {4,4};
+    cnpy::npy_save( base_path+"/graph_data.npy", node_pose[0].data(),  &shape[0], 2, "w" );
+    cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
+
+
+    // load the saved data
+    cnpy::NpyArray arr = cnpy::npy_load( base_path+"/graph_data.npy" );
+    // _print_info_on_npyarray( arr );
+
+    // Matrix4d M;
+    Map<Matrix4d> M( (double*)arr.data );
+    cout << "M\n" << M << endl;
+    */
+    int hash_nodes = getNodeLen();
+    int hash_edges = getEdgeLen();
+
+    shape = {4,4};
+    node_mutex.lock();
+    cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
+    for( int i=1 ; i<hash_nodes ; i++ )
+    {
+        cnpy::npz_save( base_path+"/graph_data.npz", "w_T_"+to_string(i), node_pose[i].data(),  &shape[0], 2, "a" );
+    }
+    cout << "written "<< hash_nodes << " pose to .npz\n";
+
+    //TODO Also save node_pose_timestamps;
+    shape = {6,6};
+    for( int i=0 ; i<hash_nodes ; i++ )
+    {
+        cnpy::npz_save( base_path+"/graph_data.npz", "cov_w_T_"+to_string(i), node_pose_covariance[i].data(), &shape[0], 2, "a"  );
+    }
+    node_mutex.unlock();
+
+
+
+    //
+    // Write Info on Edges
+    edge_mutex.lock();
+    vector<int> lp_edges;
+    shape = {4,4};
+    for( int i=0 ; i<loopclosure_edges.size() ; i++ )
+    {
+        lp_edges.push_back( loopclosure_edges[i].first );
+        lp_edges.push_back( loopclosure_edges[i].second );
+
+        cnpy::npz_save( base_path+"/graph_data.npz", "p_T_c__"+to_string(i), loopclosure_p_T_c[i].data(),  &shape[0], 2, "a" );
+
+        cout << i << ":" <<  loopclosure_edges[i].first << "<-->" <<  loopclosure_edges[i].second << "; ";
+        cout << "goodness=" << loopclosure_edges_goodness[i] << "; ";
+        cout << PoseManipUtils::prettyprintMatrix4d(  loopclosure_p_T_c[i] );
+        cout << "\n";
+    }
+
+    shape = {lp_edges.size()};
+    cnpy::npz_save( base_path+"/graph_data.npz", "loopclosure_edges",  lp_edges.data(), &shape[0], 1, "a" );
+    shape = {loopclosure_edges_goodness.size()};
+    cnpy::npz_save( base_path+"/graph_data.npz", "loopclosure_edges_goodness",  loopclosure_edges_goodness.data(), &shape[0], 1, "a" );
+
+    edge_mutex.unlock();
+    cout << "written "<< hash_edges << " loopedges to .npz\n";
+
+
+    // ---:files:---
+    // w_T_i \forall i=1 ... N
+    // p_T_c__i \forall i=1 ... E
+    // loopclosure_edges. 2E sized vector
+    // loopclosure_edges_goodness. E sized vector
+
+
+    cout << "Done@\n";
+    return true;
+
 }

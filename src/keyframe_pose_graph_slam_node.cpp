@@ -8,6 +8,7 @@
 
         Author  : Manohar Kuse <mpkuse@connect.ust.hk>
         Created : 6th June, 2018
+        Major Update : 2nd Jan, 2019 (removed dependence on nap, instead subscribes to cerebro::LoopEdge)
 
 */
 
@@ -88,7 +89,7 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
     vector<Matrix4d> optimized_w_T_ci;
     while( ros::ok() )
     {
-        cout << "periodic_publish_optimized_poses_smart\n";
+        // cout << "periodic_publish_optimized_poses_smart\n";
         if( manager->getNodeLen() == 0 ) {
             loop_rate0.sleep();
             continue;
@@ -244,7 +245,7 @@ int main( int argc, char ** argv)
 
 
     //--- Loop Closure Pose ---//
-    string loopclosure_camera_rel_pose_topic = string("/colocation_chatter" );
+    string loopclosure_camera_rel_pose_topic = string("/cerebro/loopedge" );
     // string place_recognition_topic = string("/colocation");
     ROS_INFO( "Subscribed to %s", loopclosure_camera_rel_pose_topic.c_str() );
     ros::Subscriber sub_loopclosure = nh.subscribe( loopclosure_camera_rel_pose_topic, 1000, &NodeDataManager::loopclosure_pose_callback, manager );
@@ -298,6 +299,13 @@ int main( int argc, char ** argv)
     th3.join();
 
     th_slam.join();
+
+
+    // rm -rf /Bulk_Data/_tmp_posegraph
+    // mkdir -p /Bulk_Data/_tmp_posegraph
+    // save
+    manager->saveForDebug("/Bulk_Data/_tmp_posegraph/");
+
 
     return 0;
 }

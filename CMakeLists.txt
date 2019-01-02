@@ -13,7 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   image_transport
   cv_bridge
-  nap
+  #nap
+  cerebro
   nav_msgs
 )
 
@@ -21,6 +22,7 @@ list(APPEND CMAKE_MODULE_PATH "/usr/local/lib/cmake")
 find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(OpenCV 3 REQUIRED)
+find_package( ZLIB REQUIRED ) # Needed for cnpy (c++ support for writing .npy and .npz files). Remove this and in target if you dont need it.
 
 #set(CMAKE_BUILD_TYPE "Release")
 set( CMAKE_CXX_FLAGS "-fpermissive -std=c++11 -O3" )
@@ -34,13 +36,16 @@ generate_messages(
   sensor_msgs
   geometry_msgs
   nav_msgs
-  nap
+  #nap
+  cerebro
 )
 
 
 
 catkin_package(
-  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime image_transport cv_bridge nap
+  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime image_transport cv_bridge
+  #nap
+  cerebro
 )
 
 include_directories(
@@ -57,5 +62,32 @@ add_executable( keyframe_pose_graph_slam
         src/NodeDataManager.cpp
         src/PoseGraphSLAM.cpp
         src/pose_manip_utils/PoseManipUtils.cpp
+        src/cnpy/cnpy.cpp
         )
-target_link_libraries( keyframe_pose_graph_slam  ${OpenCV_LIBRARIES} ${catkin_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}  ${CERES_LIBRARIES} )
+
+
+# Debug Node
+add_executable( debug_kf_slam_node
+    src/debug_kf_slam_node.cpp
+    src/NodeDataManager.cpp
+    src/PoseGraphSLAM.cpp
+    src/pose_manip_utils/PoseManipUtils.cpp
+    src/cnpy/cnpy.cpp
+    )
+
+
+target_link_libraries( keyframe_pose_graph_slam
+    ${OpenCV_LIBRARIES}
+    ${catkin_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${CERES_LIBRARIES}
+    ${ZLIB_LIBRARIES}
+)
+
+target_link_libraries( debug_kf_slam_node
+    ${OpenCV_LIBRARIES}
+    ${catkin_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${CERES_LIBRARIES}
+    ${ZLIB_LIBRARIES}
+)
