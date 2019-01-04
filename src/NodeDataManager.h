@@ -53,9 +53,13 @@ using namespace Eigen;
 using namespace std;
 using namespace Eigen;
 
-#include "pose_manip_utils/PoseManipUtils.h"
+#include "utils/PoseManipUtils.h"
+#include "utils/RosMarkerUtils.h"
+
 #include "cnpy/cnpy.h"
 
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
 
 
 class NodeDataManager
@@ -104,19 +108,30 @@ public:
 
 
     // Public interface
-    int getNodeLen();
-    int getEdgeLen();
-    bool getNodePose( int i, Matrix4d& w_T_cam );
-    bool getNodeCov( int i, Matrix<double,6,6>& cov );
-    bool getNodeTimestamp( int i, ros::Time& stamp );
-    bool getEdgePose( int i, Matrix4d& p_T_c );
-    bool getEdgeIdxInfo( int i, std::pair<int,int>& p );
-    double getEdgeWeight( int i );
+    // Node Getters
+    int getNodeLen() const;
+    bool getNodePose( int i, Matrix4d& w_T_cam ) const; // TODO removal
+    const Matrix4d& getNodePose( int i ) const;
+    bool getNodeCov( int i, Matrix<double,6,6>& cov ) const ; //TODO removal
+    const Matrix<double,6,6>& getNodeCov( int i ) const;
+    bool getNodeTimestamp( int i, ros::Time& stamp ) const;
+    const ros::Time getNodeTimestamp( int i ) const ;
+
+    // Edge Getters
+    int getEdgeLen() const ;
+    bool getEdgePose( int i, Matrix4d& p_T_c ) const; //TODO removal
+    const Matrix4d& getEdgePose( int i ) const ;
+    bool getEdgeIdxInfo( int i, std::pair<int,int>& p ) const; //TODO removal
+    const std::pair<int,int>& getEdgeIdxInfo( int i ) const ;
+    double getEdgeWeight( int i ) const;
+    const string getEdgeDescriptionString( int i ) const ;
 
 
     /// Will save the Variables `node_pose`, `node_timestamps`, `node_pose_covariance`; loopclosure_edges, loopclosure_edges_goodness, loopclosure_p_T_c
     bool saveForDebug( const string& base_path );
+    bool saveAsJSON( const string& base_path );
     bool loadFromDebug( const string& base_path, const vector<bool>& edge_mask ); //< Loads what saveForDebug() writes. edge_mask: a vector of 0s, 1s indicating if this edge has to be included or not. edge_mask.size() == 0 will load all
+
 
     void reset_edge_info_data();
     void reset_node_info_data();
@@ -128,17 +143,18 @@ private:
     fwrite( const string str ) { fprintf( fp, "%s", str.c_str()); }
 
     // Node
-    std::mutex node_mutex;
+    mutable std::mutex node_mutex;
     vector<Matrix4d> node_pose;
     vector<ros::Time> node_timestamps;
     vector<Matrix<double,6,6>> node_pose_covariance;
 
 
     // Closure-Edges
-    std::mutex edge_mutex;
+    mutable std::mutex edge_mutex;
     vector<std::pair<int,int>> loopclosure_edges;
     vector<double> loopclosure_edges_goodness;
     vector<Matrix4d> loopclosure_p_T_c;
+    vector<string> loopclosure_description;
 
 
     // Publish Marker
@@ -147,12 +163,7 @@ private:
 
     // Utilities
     int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp );
-    void init_camera_marker( visualization_msgs::Marker& marker, float cam_size );
-    void setpose_to_marker( const Matrix4d& w_T_c, visualization_msgs::Marker& marker );
-    void setcolor_to_marker( float r, float g, float b, visualization_msgs::Marker& marker  );
 
-    void init_line_marker( visualization_msgs::Marker &marker, const Vector3d& p1, const Vector3d& p2 );
-    void init_line_marker( visualization_msgs::Marker &marker );
 
     void _print_info_on_npyarray( const cnpy::NpyArray& arr );
 

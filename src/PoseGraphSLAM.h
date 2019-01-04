@@ -40,7 +40,7 @@
 #include "NodeDataManager.h"
 #include "ScreenColors.h"
 
-#include "pose_manip_utils/PoseManipUtils.h"
+#include "utils/PoseManipUtils.h"
 
 using namespace std;
 using namespace Eigen;
@@ -55,7 +55,7 @@ public:
     void optimize6DOF();
 
     // Get the optimized pose at node i. This function is thread-safe
-    Matrix4d getNodePose( int i );
+    const Matrix4d getNodePose( int i );
     int nNodes();
     void getAllNodePose( vector<Matrix4d>& vec_w_T_ci );
 

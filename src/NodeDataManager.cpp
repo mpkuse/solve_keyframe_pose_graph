@@ -53,16 +53,12 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 
     // release thread-lock
     // Need thread-lock
-    node_mutex.lock();
-    node_timestamps.push_back( msg->header.stamp );
-    node_pose.push_back( w_T_cam );
-    node_pose_covariance.push_back( Cov );
-    node_mutex.unlock();
-
-
-
-
-
+    {
+        std::lock_guard<std::mutex> lk(node_mutex);
+        node_timestamps.push_back( msg->header.stamp );
+        node_pose.push_back( w_T_cam );
+        node_pose_covariance.push_back( Cov );
+    }
 }
 
 
@@ -128,6 +124,7 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     // int op_mode = msg->op_mode;
     double goodness = (double)msg->weight;
     // assert( op_mode == 30 );
+    string description = msg->description;
 
     // retrive rel-pose  p_T_c
     Matrix4d p_T_c = Matrix4d::Zero();
@@ -151,18 +148,21 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     // Unlock
     node_mutex.unlock();
 
-    cout << "[NodeDataManager] Rcvd NapMsg " << index_t_c << "<--->" << index_t_p << endl;
+    cout << "[NodeDataManager] Rcvd Loop Edge " << index_t_c << "<--->" << index_t_p << endl;
     assert( t_c > t_p );
 
     std::pair<int,int> closure_edge;
     closure_edge.first = index_t_p;
     closure_edge.second = index_t_c;
 
-    edge_mutex.lock();
-    loopclosure_edges.push_back( closure_edge );
-    loopclosure_edges_goodness.push_back( goodness );
-    loopclosure_p_T_c.push_back( p_T_c );
-    edge_mutex.unlock();
+
+    {
+        std::lock_guard<std::mutex> lk(edge_mutex);
+        loopclosure_edges.push_back( closure_edge );
+        loopclosure_edges_goodness.push_back( goodness );
+        loopclosure_p_T_c.push_back( p_T_c );
+        loopclosure_description.push_back( description );
+    }
 
 
 
@@ -187,7 +187,7 @@ void NodeDataManager::setPathPublisher( const ros::Publisher& pub )
 void NodeDataManager::publishLastNNodes( int n )
 {
     visualization_msgs::Marker marker ;
-    init_camera_marker( marker, .8 );
+    RosMarkerUtils::init_camera_marker( marker, .8 );
 
     node_mutex.lock();
     int len = node_pose.size();
@@ -207,8 +207,8 @@ void NodeDataManager::publishLastNNodes( int n )
         Matrix4d w_T_c = node_pose[i];
         // node_mutex.unlock();
         // cout << "publish "<< i << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
-        setpose_to_marker( w_T_c, marker );
-        setcolor_to_marker( 0.0, 1.0, 0.0, marker );
+        RosMarkerUtils::setpose_to_marker( w_T_c, marker );
+        RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.0, marker );
         marker.id = i;
         marker.ns = "vio_kf_pose";
 
@@ -220,7 +220,7 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
 {
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
-    init_line_marker( marker );
+    RosMarkerUtils::init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.scale.x *= 2;
@@ -256,7 +256,7 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
 
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
-    init_line_marker( marker );
+    RosMarkerUtils::init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.scale.x = 0.02;
@@ -298,9 +298,9 @@ void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const st
     {
         int last_idx = w_T_ci.size() - 1;
         visualization_msgs::Marker marker2 ;
-        init_camera_marker( marker2, 10 );
-        setpose_to_marker( w_T_ci[last_idx], marker2 );
-        setcolor_to_marker( r,g,b, marker2 );
+        RosMarkerUtils::init_camera_marker( marker2, 10 );
+        RosMarkerUtils::setpose_to_marker( w_T_ci[last_idx], marker2 );
+        RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
         marker2.scale.x = 0.02;
         marker2.id = 0;
         marker2.ns = ns+string("_cam_visual");
@@ -327,7 +327,7 @@ void NodeDataManager::publishEdgesAsLineArray( int n )
 
     // make a line marker
     visualization_msgs::Marker marker;
-    init_line_marker( marker );
+    RosMarkerUtils::init_line_marker( marker );
 
     for( int i=start; i<end ; i++ )
     {
@@ -355,7 +355,7 @@ void NodeDataManager::publishEdgesAsLineArray( int n )
     }
     marker.ns = "loop_closure_edges_ary";
     marker.id = 0;
-    setcolor_to_marker( 0.0, 1.0, 0.2, marker );
+    RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.2, marker );
     marker.scale.x = 0.03;
     pub_pgraph.publish( marker );
 
@@ -364,12 +364,12 @@ void NodeDataManager::publishEdgesAsLineArray( int n )
 void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
 {
     visualization_msgs::Marker marker ;
-    init_camera_marker( marker, .6 );
+    RosMarkerUtils::init_camera_marker( marker, .6 );
 
     for( int i=0 ; i<w_T_ci.size() ; i++ )
     {
-        setpose_to_marker( w_T_ci[i], marker );
-        setcolor_to_marker( r,g,b, marker );
+        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
+        RosMarkerUtils::setcolor_to_marker( r,g,b, marker );
         marker.id = i;
         marker.ns = ns; //"opt_kf_pose";
 
@@ -386,12 +386,12 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
     assert( idx_partition <= w_T_ci.size() );
 
     visualization_msgs::Marker marker ;
-    init_camera_marker( marker, .6 );
+    RosMarkerUtils::init_camera_marker( marker, .6 );
 
     for( int i=0 ; i<idx_partition ; i++ )
     {
-        setpose_to_marker( w_T_ci[i], marker );
-        setcolor_to_marker( r,g,b, marker );
+        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
+        RosMarkerUtils::setcolor_to_marker( r,g,b, marker );
         marker.id = i;
         marker.ns = ns; //"opt_kf_pose";
 
@@ -400,8 +400,8 @@ void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, f
 
     for( int i=idx_partition ; i<w_T_ci.size() ; i++ )
     {
-        setpose_to_marker( w_T_ci[i], marker );
-        setcolor_to_marker( r1,g1,b1, marker );
+        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
+        RosMarkerUtils::setcolor_to_marker( r1,g1,b1, marker );
         marker.id = i;
         marker.ns = ns; //"opt_kf_pose";
 
@@ -484,166 +484,14 @@ void NodeDataManager::publishLastNEdges( int n )
 
         // make a line marker
         visualization_msgs::Marker marker;
-        init_line_marker( marker, w_t_prev, w_t_curr );
+        RosMarkerUtils::init_line_marker( marker, w_t_prev, w_t_curr );
         marker.id = i;
         marker.ns = "loop_closure_edges";
-        setcolor_to_marker( 0.0, 1.0, 0.2, marker );
+        RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.2, marker );
 
         pub_pgraph.publish( marker );
     }
 }
-
-
-// cam_size = 1: means basic size. 1.5 will make it 50% bigger.
-void NodeDataManager::init_camera_marker( visualization_msgs::Marker& marker, float cam_size )
-{
-     marker.header.frame_id = "world";
-     marker.header.stamp = ros::Time::now();
-     marker.action = visualization_msgs::Marker::ADD;
-     marker.color.a = .7; // Don't forget to set the alpha!
-     marker.type = visualization_msgs::Marker::LINE_LIST;
-    //  marker.id = i;
-    //  marker.ns = "camerapose_visual";
-
-     marker.scale.x = 0.003; //width of line-segments
-     float __vcam_width = 0.07*cam_size;
-     float __vcam_height = 0.04*cam_size;
-     float __z = 0.1*cam_size;
-
-
-
-
-     marker.points.clear();
-     geometry_msgs::Point pt;
-     pt.x = 0; pt.y=0; pt.z=0;
-     marker.points.push_back( pt );
-     pt.x = __vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = 0; pt.y=0; pt.z=0;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = 0; pt.y=0; pt.z=0;
-     marker.points.push_back( pt );
-     pt.x = __vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = 0; pt.y=0; pt.z=0;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-
-     pt.x = __vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = -__vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = __vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = __vcam_width; pt.y=-__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-     pt.x = __vcam_width; pt.y=__vcam_height; pt.z=__z;
-     marker.points.push_back( pt );
-
-
-     // TOSET
-    marker.pose.position.x = 0.;
-    marker.pose.position.y = 0.;
-    marker.pose.position.z = 0.;
-    marker.pose.orientation.x = 0.;
-    marker.pose.orientation.y = 0.;
-    marker.pose.orientation.z = 0.;
-    marker.pose.orientation.w = 1.;
-    // marker.id = i;
-    // marker.ns = "camerapose_visual";
-    marker.color.r = 0.2;marker.color.b = 0.;marker.color.g = 0.;
-}
-
-void NodeDataManager::setpose_to_marker( const Matrix4d& w_T_c, visualization_msgs::Marker& marker )
-{
-    Quaterniond quat( w_T_c.topLeftCorner<3,3>() );
-    marker.pose.position.x = w_T_c(0,3);
-    marker.pose.position.y = w_T_c(1,3);
-    marker.pose.position.z = w_T_c(2,3);
-    marker.pose.orientation.x = quat.x();
-    marker.pose.orientation.y = quat.y();
-    marker.pose.orientation.z = quat.z();
-    marker.pose.orientation.w = quat.w();
-}
-
-void NodeDataManager::setcolor_to_marker( float r, float g, float b, visualization_msgs::Marker& marker  )
-{
-    marker.color.r = r;
-    marker.color.g = g;
-    marker.color.b = b;
-}
-
-
-void NodeDataManager::init_line_marker( visualization_msgs::Marker &marker )
-{
-    marker.header.frame_id = "world";
-    marker.header.stamp = ros::Time::now();
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.color.a = .8; // Don't forget to set the alpha!
-    marker.type = visualization_msgs::Marker::LINE_LIST;
-
-    marker.scale.x = 0.005;
-
-    marker.points.clear();
-
-    //// Done . no need to edit firther
-    marker.pose.position.x = 0.;
-    marker.pose.position.y = 0.;
-    marker.pose.position.z = 0.;
-    marker.pose.orientation.x = 0.;
-    marker.pose.orientation.y = 0.;
-    marker.pose.orientation.z = 0.;
-    marker.pose.orientation.w = 1.;
-    // marker.id = i;
-    // marker.ns = "camerapose_visual";
-    marker.color.r = 0.2;marker.color.b = 0.;marker.color.g = 0.;
-
-}
-
-void NodeDataManager::init_line_marker( visualization_msgs::Marker &marker, const Vector3d& p1, const Vector3d& p2 )
-{
-    marker.header.frame_id = "world";
-    marker.header.stamp = ros::Time::now();
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.color.a = .8; // Don't forget to set the alpha!
-    marker.type = visualization_msgs::Marker::LINE_LIST;
-
-    marker.scale.x = 0.005;
-
-    marker.points.clear();
-    geometry_msgs::Point pt;
-    pt.x = p1(0);
-    pt.y = p1(1);
-    pt.z = p1(2);
-    marker.points.push_back( pt );
-    pt.x = p2(0);
-    pt.y = p2(1);
-    pt.z = p2(2);
-    marker.points.push_back( pt );
-
-    //// Done . no need to edit firther
-    marker.pose.position.x = 0.;
-    marker.pose.position.y = 0.;
-    marker.pose.position.z = 0.;
-    marker.pose.orientation.x = 0.;
-    marker.pose.orientation.y = 0.;
-    marker.pose.orientation.z = 0.;
-    marker.pose.orientation.w = 1.;
-    // marker.id = i;
-    // marker.ns = "camerapose_visual";
-    marker.color.r = 0.2;marker.color.b = 0.;marker.color.g = 0.;
-
-}
-
 
 /////////////////////// Utility
 // Loop over each node and return the index of the node which is clossest to the specified stamp
@@ -670,25 +518,28 @@ int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_st
 
 
 ////////////////// Public interfaces for data... thread safe
-int NodeDataManager::getNodeLen()
+int NodeDataManager::getNodeLen() const
 {
-    node_mutex.lock();
+    std::lock_guard<std::mutex> lk(node_mutex);
+    // node_mutex.lock();
     int n = node_pose.size();
-    node_mutex.unlock();
+    // node_mutex.unlock();
     return n;
 }
 
-int NodeDataManager::getEdgeLen()
+int NodeDataManager::getEdgeLen() const
 {
-    edge_mutex.lock();
+    std::lock_guard<std::mutex> lk(edge_mutex);
+    // edge_mutex.lock();
     int n = loopclosure_edges.size();
-    edge_mutex.unlock();
+    // edge_mutex.unlock();
     return n;
 }
 
 // returns w_T_cam
-bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
+bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam ) const
 {
+    std::lock_guard<std::mutex> lk(node_mutex);
     bool status;
     // node_mutex.lock(); //since this is readonly dont need a lock
     if( i>=0 && i< node_pose.size() )
@@ -705,8 +556,18 @@ bool NodeDataManager::getNodePose( int i, Matrix4d& w_T_cam )
     return status;
 }
 
-bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
+const Matrix4d& NodeDataManager::getNodePose( int i ) const
 {
+    std::lock_guard<std::mutex> lk(node_mutex);
+
+    assert( ( i>=0 && i< node_pose.size() ) );
+    return node_pose[i];
+}
+
+bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov ) const
+{
+    std::lock_guard<std::mutex> lk(node_mutex);
+
     bool status;
     // node_mutex.lock(); Since this is readonly dont need a lock
     if( i>=0 && i< node_pose_covariance.size() )
@@ -723,8 +584,16 @@ bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov )
     return status;
 }
 
-bool NodeDataManager::getNodeTimestamp( int i, ros::Time& stamp )
+const Matrix<double,6,6>& NodeDataManager::getNodeCov( int i ) const
 {
+    std::lock_guard<std::mutex> lk(node_mutex);
+    assert(  i>=0 && i< node_pose_covariance.size() );
+    return node_pose_covariance[i];
+}
+
+bool NodeDataManager::getNodeTimestamp( int i, ros::Time& stamp ) const
+{
+    std::lock_guard<std::mutex> lk(node_mutex);
     bool status;
     // node_mutex.lock(); Since this is readonly dont need a lock
     if( i>=0 && i< node_timestamps.size() )
@@ -741,9 +610,17 @@ bool NodeDataManager::getNodeTimestamp( int i, ros::Time& stamp )
     return status;
 }
 
-// return p_T_c
-bool NodeDataManager::getEdgePose( int i, Matrix4d& p_T_c )
+const ros::Time NodeDataManager::getNodeTimestamp( int i ) const
 {
+    std::lock_guard<std::mutex> lk(node_mutex);
+    assert( i>=0 && i< node_timestamps.size() );
+    return node_timestamps[i];
+}
+
+// return p_T_c
+bool NodeDataManager::getEdgePose( int i, Matrix4d& p_T_c ) const
+{
+    std::lock_guard<std::mutex> lk(edge_mutex);
     if( i>=0 && i<loopclosure_edges.size() )
     {
         p_T_c = loopclosure_p_T_c[i];
@@ -752,9 +629,17 @@ bool NodeDataManager::getEdgePose( int i, Matrix4d& p_T_c )
     return false;
 }
 
-// edge idx info
-bool NodeDataManager::getEdgeIdxInfo( int i, std::pair<int,int>& p )
+const Matrix4d& NodeDataManager::getEdgePose( int i ) const
 {
+    std::lock_guard<std::mutex> lk(edge_mutex);
+    assert( i>=0 && i<loopclosure_edges.size() );
+    return loopclosure_p_T_c[i];
+}
+
+// edge idx info
+bool NodeDataManager::getEdgeIdxInfo( int i, std::pair<int,int>& p ) const
+{
+    std::lock_guard<std::mutex> lk(edge_mutex);
     bool status;
     if( i>=0 && i<loopclosure_edges.size() ) {
         p = loopclosure_edges[i];
@@ -763,9 +648,16 @@ bool NodeDataManager::getEdgeIdxInfo( int i, std::pair<int,int>& p )
     return false;
 }
 
-
-double NodeDataManager::getEdgeWeight( int i )
+const std::pair<int,int>& NodeDataManager::getEdgeIdxInfo( int i ) const
 {
+    std::lock_guard<std::mutex> lk(edge_mutex);
+    assert( i>=0 && i<loopclosure_edges.size() );
+    return loopclosure_edges[i];
+}
+
+double NodeDataManager::getEdgeWeight( int i ) const
+{
+    std::lock_guard<std::mutex> lk(edge_mutex);
     if( i>=0 && i<loopclosure_edges.size() ) {
         return loopclosure_edges_goodness[i];
     }
@@ -773,8 +665,43 @@ double NodeDataManager::getEdgeWeight( int i )
 }
 
 
+const string NodeDataManager::getEdgeDescriptionString( int i ) const
+{
+    std::lock_guard<std::mutex> lk(edge_mutex);
+    if( i>=0 && i<loopclosure_edges.size() ) {
+        return loopclosure_description[i];
+    }
+    return "NA";
+
+
+}
+
+
+
+
+
+void NodeDataManager::reset_edge_info_data()
+{
+    std::lock_guard<std::mutex> lk(edge_mutex);
+
+    loopclosure_edges.clear();
+    loopclosure_edges_goodness.clear();
+    loopclosure_p_T_c.clear();
+    loopclosure_description.clear();
+}
+
+void NodeDataManager::reset_node_info_data()
+{
+    std::lock_guard<std::mutex> lk(node_mutex);
+
+    node_pose.clear();
+    node_timestamps.clear();
+    node_pose_covariance.clear();
+}
+
 
 ////////////////////// Save Data to file for analysis //////////////
+
 void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
 {
 
@@ -796,20 +723,6 @@ void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
     double * loaded_data = (double*) arr.data;
     for( int i=0 ; i<raw_data_size ; i++ )
         cout << loaded_data[i] << " ";
-}
-
-void NodeDataManager::reset_edge_info_data()
-{
-    loopclosure_edges.clear();
-    loopclosure_edges_goodness.clear();
-    loopclosure_p_T_c.clear();
-}
-
-void NodeDataManager::reset_node_info_data()
-{
-    node_pose.clear();
-    node_timestamps.clear();
-    node_pose_covariance.clear();
 }
 
 bool NodeDataManager::loadFromDebug( const string& base_path, const vector<bool>& edge_mask )
@@ -1028,5 +941,89 @@ bool NodeDataManager::saveForDebug( const string& base_path )
 
     cout << "Done@\n";
     return true;
+
+}
+
+
+
+bool NodeDataManager::saveAsJSON( const string& base_path )
+{
+    json all_info;
+    const static IOFormat CSVFormat(FullPrecision, DontAlignCols, ",", ";");
+
+
+    all_info["meta_data"]["getNodeLen"] = getNodeLen();
+    all_info["meta_data"]["getEdgeLen"] = getEdgeLen();
+
+    // Node Info
+    for( int i=0 ; i<getNodeLen() ; i++ )
+    {
+        // node_mutex.lock();
+        // ros::Time stamp;
+        // getNodeTimestamp( i, stamp );
+
+        json node;
+        node["timestamp"] = getNodeTimestamp(i).toSec();
+        node["idx"] = i;
+
+        Matrix4d wTc;
+        getNodePose(i, wTc );
+        std::stringstream ss;
+        ss << wTc.format(CSVFormat);
+        node["wTc"] = ss.str();
+
+        Matrix<double,6,6> cov;
+        std::stringstream ss2;
+        ss2 << cov.format(CSVFormat);
+        getNodeCov( i, cov );
+        node["cov"] = ss2.str();
+
+        all_info["nodes"].push_back( node );
+
+        // node_mutex.unlock();
+
+    }
+
+
+    // Edge Info
+    for( int i=0; i<getEdgeLen() ; i++ )
+    {
+        // edge_mutex.lock();
+        json edge;
+
+        const std::pair<int,int> p = getEdgeIdxInfo(i);
+
+        edge["idx0"] = p.first;
+        edge["idx1"] = p.second;
+        edge["timestamp0"] = getNodeTimestamp(p.first).toSec();
+        edge["timestamp1"] = getNodeTimestamp(p.second).toSec();
+
+
+        const Matrix4d b_T_a = getEdgePose(i);
+        std::stringstream ss;
+        ss << b_T_a.format(CSVFormat);
+        edge["b_T_a"] = ss.str();
+
+        edge["weight"] = getEdgeWeight( i );
+        edge["description"] = getEdgeDescriptionString(i);
+        // edge_mutex.unlock();
+
+        all_info["loopedges"].push_back( edge );
+
+
+    }
+
+
+    // Save file
+    cout << "Write : "<< base_path+"/log_posegraph.json"<< endl;
+    std::ofstream outf(base_path+"/log_posegraph.json");
+    if( !outf.is_open() ) {
+        cout << "[ERROR saveAsJSON] Cannot open file\n";
+        return false;
+    }
+
+    outf << std::setw(4) << all_info << std::endl;
+    return true;
+
 
 }

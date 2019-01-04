@@ -19,6 +19,7 @@
 #include <fstream>
 #include <queue>
 #include <ostream>
+#include <cstdlib>
 
 
 #include <thread>
@@ -301,10 +302,24 @@ int main( int argc, char ** argv)
     th_slam.join();
 
 
+    ///// Save Pose Graph for Debugging
+    const string DATA_PATH = "/Bulk_Data/_tmp_posegraph/";
+
     // rm -rf /Bulk_Data/_tmp_posegraph
+    string cmd_rm = "rm -rf "+DATA_PATH;
+    cout << cmd_rm ;
+    std::system( cmd_rm.c_str() );
+
+
     // mkdir -p /Bulk_Data/_tmp_posegraph
+    string cmd_mkdir = "mkdir -p "+DATA_PATH;
+    cout << cmd_mkdir ;
+    std::system( cmd_mkdir.c_str() );
+
+
     // save
-    manager->saveForDebug("/Bulk_Data/_tmp_posegraph/");
+    manager->saveForDebug( DATA_PATH );
+    manager->saveAsJSON( DATA_PATH );
 
 
     return 0;

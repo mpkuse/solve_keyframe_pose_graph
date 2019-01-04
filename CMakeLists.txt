@@ -61,7 +61,8 @@ add_executable( keyframe_pose_graph_slam
         src/keyframe_pose_graph_slam_node.cpp
         src/NodeDataManager.cpp
         src/PoseGraphSLAM.cpp
-        src/pose_manip_utils/PoseManipUtils.cpp
+        src/utils/PoseManipUtils.cpp
+        src/utils/RosMarkerUtils.cpp
         src/cnpy/cnpy.cpp
         )
 
@@ -71,7 +72,8 @@ add_executable( debug_kf_slam_node
     src/debug_kf_slam_node.cpp
     src/NodeDataManager.cpp
     src/PoseGraphSLAM.cpp
-    src/pose_manip_utils/PoseManipUtils.cpp
+    src/utils/PoseManipUtils.cpp
+    src/utils/RosMarkerUtils.cpp
     src/cnpy/cnpy.cpp
     )
 
