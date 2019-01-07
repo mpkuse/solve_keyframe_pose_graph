@@ -421,14 +421,19 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
 
 
     eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
-    cauchy_loss = new ceres::CauchyLoss(1.0);
+    // robust_norm = new ceres::CauchyLoss(1.0);
+    robust_norm = new ceres::HuberLoss(0.1);
 
 }
 
 
 
-// #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) msg;
-#define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
+#define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) msg;
+// #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
+
+#define __PoseGraphSLAM_new_optimize6DOF_odom( msg ) msg;
+// #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
+
 
 void PoseGraphSLAM::new_optimize6DOF()
 {
@@ -442,6 +447,7 @@ void PoseGraphSLAM::new_optimize6DOF()
     ros::Rate loop_rate(1); // 1 time per sec
     int prev_node_len=0, node_len;
     int prev_loopedge_len=0, loopedge_len;
+    solved_until = 1;
     while( new_optimize6DOF_isEnabled )
     {
         cout << "---\n";
@@ -458,10 +464,14 @@ void PoseGraphSLAM::new_optimize6DOF()
         //-------------------
         if( node_len > prev_node_len )
         {
+            __PoseGraphSLAM_new_optimize6DOF_odom(
             cout << TermColor::CYAN() << "there are " << node_len - prev_node_len << " new nodes\t";
             cout << " from [" << prev_node_len << ", " << node_len-1 << "]" << TermColor::RESET() << endl;
+            )
 
-            // TODO Add new optimization variables and initialize them correctly.
+            //###################
+            // Add new optimization variables and initialize them correctly.
+            //###################
             __PoseGraphSLAM_new_optimize6DOF_odom_debug(
             cout << TermColor::CYAN() << "Add new optimization variables for each node and initialize them correctly. push_back optimization variables for each of these" << TermColor::RESET() << endl;
             )
@@ -471,8 +481,34 @@ void PoseGraphSLAM::new_optimize6DOF()
                 }
                 else {
                     // TODO think more, probably need to use solved_until and init the pose of opt variables accordingly
-
+                    #if 0
                     allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
+                    #else
+
+                    // M : uncorrected poses
+                    // T : corrected poses
+
+                    // Note:
+                    // Say in the previous run 0-248 are optimized and there are new nodes
+                    // from 249 to 290 whose VIO exists but not yet taken into ceres.
+                    // wTM_260 = w_T_248 * 248_M_260
+                    //         = w_T_248 * 248_M_w * w_M_260
+                    //         = w_T_248 * w_M_280.inv() * w_M_260
+                    // Getting the relative pose between current last corrected one
+                    Matrix4d w_M_last = manager->getNodePose( (int)this->solvedUntil()-1 );
+
+                    Matrix4d w_M_u = manager->getNodePose(u);
+                    Matrix4d last_M_u = w_M_last.inverse() * w_M_u;
+
+                    Matrix4d w_T_last = this->getNodePose( (int)this->solvedUntil()-1 );
+                    Matrix4d w_TM_u = w_T_last * last_M_u;
+
+                    allocate_and_append_new_opt_variable_withpose( w_TM_u );
+
+
+                    #endif
+
+
                 }
 
                 __PoseGraphSLAM_new_optimize6DOF_odom_debug( cout << u << "\t" );
@@ -488,7 +524,9 @@ void PoseGraphSLAM::new_optimize6DOF()
 
 
 
-            // TODO Add odometry edges - residue terms
+            //###########################
+            // Add odometry edges - residue terms
+            //###########################
             __PoseGraphSLAM_new_optimize6DOF_odom_debug(
             cout << TermColor::CYAN() << "Add odometry edges residue terms" << TermColor::RESET() << endl;
             )
@@ -497,18 +535,30 @@ void PoseGraphSLAM::new_optimize6DOF()
                 for( int f=1 ; f<=4; f++ ) { // the '4' here is tunable, can try say 5 or 8 or 10.
                     if( u-f < 0 )
                         continue;
+
+
+                    // Pose of odometry edge
+                    Matrix4d w_M_u = manager->getNodePose(u);
+                    Matrix4d w_M_umf = manager->getNodePose(u-f);
+                    Matrix4d u_M_umf =  w_M_u.inverse() * w_M_umf ;
+
+                    double odom_edge_weight=1.0;
+
+                    // weight of odometry edge - deminish as it you go farther away 0.7-0.95 is usually a good value
+                    odom_edge_weight *= pow(0.9,f);
+
+                    // weight inversely proportional to yaw. More the yaw, less should the weight.
+                    // The idea is that, odometry tends to be most error prone on yaws
+                    Vector3d __ypr = PoseManipUtils::R2ypr( u_M_umf.topLeftCorner<3,3>() );
+                    odom_edge_weight *= exp( -__ypr(0)*__ypr(0)/6. );
+
                     __PoseGraphSLAM_new_optimize6DOF_odom_debug(
-                        cout << u << "<-->" << u-f << "\t";
+                        cout << u << "<--(" << std::setprecision(3) << odom_edge_weight << ")-->" << u-f << "\t";
+                        // cout << "del_yaw = " << __ypr(0) << endl;
                     )
 
-                    Matrix4d w_M_u, w_M_umf;
-                    bool status0 = manager->getNodePose(u, w_M_u);
-                    bool status1 = manager->getNodePose(u-f, w_M_umf );
-                    assert( status0 && status1 );
-
-                    Matrix4d u_M_umf =  w_M_u.inverse() * w_M_umf ;
-                    ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf );
-                    problem.AddResidualBlock( cost_function, cauchy_loss,
+                    ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
+                    problem.AddResidualBlock( cost_function, NULL,
                         get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
                         get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
 
@@ -528,60 +578,72 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << TermColor::MAGENTA() << "there are " << loopedge_len - prev_loopedge_len << " new loopedges\t";
             cout << " from [" << prev_loopedge_len << ", " << loopedge_len-1 << "]" << TermColor::RESET() << endl;
 
+            //##############################
             // TODO Add loopedges residues for each edge
-            cout <<  TermColor::MAGENTA() << "Add loopedges" << TermColor::RESET() << endl;
+            //##############################
+            cout <<  TermColor::MAGENTA() << "Add loopedges from [" << prev_loopedge_len << ", " << loopedge_len-1  << "]"<< TermColor::RESET() << endl;
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
-                MatrixXd pTc = manager->getEdgePose(e);
+                MatrixXd bTa = manager->getEdgePose(e);
                 double weight = manager->getEdgeWeight(e);
                 auto paur = manager->getEdgeIdxInfo(e);
-                cout << paur.first << "<-->" << paur.second << "\t";
-                cout << manager->getEdgeDescriptionString(e) << "\t";
-                cout << PoseManipUtils::prettyprintMatrix4d(pTc) << endl;;
+
+                cout << "\t##loopedge e=" << e << "\t";
+                cout << "(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(4) << weight;
+                cout << "\n\tdescription_string=" << manager->getEdgeDescriptionString(e) << "\n";
+                cout << "\tbTa="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
 
 
-                ceres::CostFunction * cost_function = SixDOFError::Create( pTc, weight );
-                problem.AddResidualBlock( cost_function, cauchy_loss,
+                ceres::CostFunction * cost_function = SixDOFError::Create( bTa, weight );
+                problem.AddResidualBlock( cost_function, robust_norm,
                     get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
                     get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first)  );
             }
 
 
             #if 1
-            cout << "Loopedges before Solve()\n";
+            cout << TermColor::YELLOW() << "## Loopedges before Solve()\n";
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
                 auto paur = manager->getEdgeIdxInfo(e);
                 int _a = paur.first;
                 int _b = paur.second;
                 cout << _a << "<-->" << _b << "\t";
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
-                cout << "(opt_vars)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
+                cout << "bTa(opt_vars)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
 
                 auto getEdgePose_after_opt_manager = manager->getNodePose(_b).inverse() * manager->getNodePose(_a);
                 cout << std::setprecision(20) << "(manager)a_timestamp=" << manager->getNodeTimestamp( _a ).toSec() << "\t" << "b_timestamp=" << manager->getNodeTimestamp(_b).toSec() << endl;
-                cout << "(manager)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt_manager ) << endl;
+                cout << "bTa(manager,odom)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt_manager ) << endl;
             }
+            cout << TermColor::RESET() ;
             #endif
 
 
-            // TODO CERES::SOLVE()
+            //-------------------------------
+            // CERES::SOLVE()
+            //-------------------------------
             #if 1
+            cout << TermColor::iGREEN() ;
             cout << "solve()\n";
             ceres::Solve( options, &problem, &summary );
             solved_until = node_len;
             // cout << summary.FullReport() << endl;
             cout << summary.BriefReport() << endl;
+            cout << TermColor::RESET() << endl;
             #endif
+
+
 
             #if 1
             // print loopedges after optimization
-            cout << "Loopedges after Solve()\n";
+            cout << TermColor::YELLOW() << "## Loopedges after Solve()\n";
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
                 auto paur = manager->getEdgeIdxInfo(e);
                 int _a = paur.first;
                 int _b = paur.second;
                 cout << _a << "<-->" << _b << "\t";
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
-                cout << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
+                cout << "bTa" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
+                cout << TermColor::RESET() ;
             }
             #endif
 

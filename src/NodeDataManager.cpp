@@ -157,7 +157,7 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     closure_edge.first = index_t_a;
     closure_edge.second = index_t_b;
 
-
+    if( index_t_a>=0 && index_t_b >=0   )
     {
         std::lock_guard<std::mutex> lk(edge_mutex);
         loopclosure_edges.push_back( closure_edge );
@@ -165,6 +165,9 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
         loopclosure_p_T_c.push_back( b_T_a );
         loopclosure_description.push_back( description );
         loopclosure_edges_timestamps.push_back( std::make_pair( t_a, t_b) );
+    }
+    else {
+        cout << TermColor::YELLOW() << "[NodeDataManager::loopclosure_pose_callback] This edge's end points cannot be found in vector of nodes. This is not FATAL, I am ignoring this edge candidate as a fix.Ideally this should not be happening.\n" << TermColor::RESET() << endl;
     }
 
 
@@ -197,7 +200,7 @@ int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_st
   // cout << endl;
 
   int to_return = -1;
-  for( int i=0 ; i<global_nodes_stamps.size() ; i++ )
+  for( int i=0 ; i<global_nodes_stamps.size() ; i++ ) // TODO how about try backward loop.
   {
     diff = global_nodes_stamps[i] - stamp;
 
@@ -209,13 +212,8 @@ int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_st
         to_return = i;
     }
 
-    // if( diff < ros::Duration(0.0001) && diff > ros::Duration(-0.0001) ){
-    //   return i;
-    // }
-  }//TODO: the duration can be a fixed param. Basically it is used to compare node timestamps.
-  // ROS_INFO( "Last Diff=%d:%d. Cannot find specified timestamp in nodelist. ", diff.sec,diff.nsec);
 
-  // return -1;
+  }
 
   // cout << "returned idx=" << to_return << endl;
   return to_return;
