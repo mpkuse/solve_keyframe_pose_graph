@@ -56,4 +56,18 @@ public:
     static void vec_to_cross_matrix( const Vector3d& a, Matrix3d& A_x );
     static void vec_to_cross_matrix( double a, double b, double c, Matrix3d& A_x );
 
+    //
+    // mat_string: `,` is element separator, `;` is row separator
+    // -0.7821597511840523,0.08450759954564141,-0.6173204915169552,0.05010736970536474;0.6091105980029734,0.312309136857035,-0.7290043089283312,-0.02311224082835456;0.1311884256638585,-0.9462142826308676,-0.2957501112716461,-0.259855927341223;0,0,0,1
+    static bool string_to_eigenmat( const string mat_string, Matrix4d& mat );
+    static bool string_to_eigenmat( const string mat_string, Matrix<double,6,6>& mat );
+    // static bool string_to_eigenmat( const string mat_string, MatrixXd& mat );
+
+
+private:
+    static std::vector<std::string>
+    split( std::string const& original, char separator );
+
+
+
 };

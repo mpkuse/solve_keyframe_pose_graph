@@ -119,397 +119,106 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     // Add a new edge ( 2 node*)
 
 
-    ros::Time t_c = msg->timestamp0;
-    ros::Time t_p = msg->timestamp1;
+    ros::Time t_a = msg->timestamp0;
+    ros::Time t_b = msg->timestamp1;
     // int op_mode = msg->op_mode;
     double goodness = (double)msg->weight;
     // assert( op_mode == 30 );
     string description = msg->description;
 
     // retrive rel-pose  p_T_c
-    Matrix4d p_T_c = Matrix4d::Zero();
-    Quaterniond quat( msg->pose_1T0.orientation.w, msg->pose_1T0.orientation.x, msg->pose_1T0.orientation.y, msg->pose_1T0.orientation.z );
-    p_T_c.topLeftCorner<3,3>() = quat.toRotationMatrix();
-    p_T_c(0,3) = msg->pose_1T0.position.x;
-    p_T_c(1,3) = msg->pose_1T0.position.y;
-    p_T_c(2,3) = msg->pose_1T0.position.z;
-    p_T_c(3,3) = 1.0;
+    Matrix4d b_T_a = Matrix4d::Zero();
+    Quaterniond quat( msg->pose_1T0.orientation.w,
+        msg->pose_1T0.orientation.x,
+        msg->pose_1T0.orientation.y, msg->pose_1T0.orientation.z );
+    b_T_a.topLeftCorner<3,3>() = quat.toRotationMatrix();
+    b_T_a(0,3) = msg->pose_1T0.position.x;
+    b_T_a(1,3) = msg->pose_1T0.position.y;
+    b_T_a(2,3) = msg->pose_1T0.position.z;
+    b_T_a(3,3) = 1.0;
 
 
     // Lock
     node_mutex.lock() ;
 
     // loop up t_c in node_timestamps[]
-    int index_t_c = find_indexof_node(node_timestamps, t_c );
+    int index_t_a = find_indexof_node(node_timestamps, t_a );
 
     // loop up t_p in node_timestamps
-    int index_t_p = find_indexof_node(node_timestamps, t_p );
+    int index_t_b = find_indexof_node(node_timestamps, t_b );
 
     // Unlock
     node_mutex.unlock();
 
-    cout << "[NodeDataManager] Rcvd Loop Edge " << index_t_c << "<--->" << index_t_p << endl;
-    assert( t_c > t_p );
+    // cout << "[NodeDataManager] Rcvd Loop Edge " << index_t_c << "<--->" << index_t_p << endl;
+    // assert( t_c > t_p );
 
     std::pair<int,int> closure_edge;
-    closure_edge.first = index_t_p;
-    closure_edge.second = index_t_c;
+    closure_edge.first = index_t_a;
+    closure_edge.second = index_t_b;
 
 
     {
         std::lock_guard<std::mutex> lk(edge_mutex);
         loopclosure_edges.push_back( closure_edge );
         loopclosure_edges_goodness.push_back( goodness );
-        loopclosure_p_T_c.push_back( p_T_c );
+        loopclosure_p_T_c.push_back( b_T_a );
         loopclosure_description.push_back( description );
+        loopclosure_edges_timestamps.push_back( std::make_pair( t_a, t_b) );
     }
 
 
 
 }
 
-
-/////////////////// Publish
-void NodeDataManager::setVisualizationPublisher( const ros::Publisher& pub )
+// internal node queue length info
+void NodeDataManager::print_nodes_lengths()
 {
-  // usually was "/mish/pose_nodes"
-  pub_pgraph = pub;
-}
-
-void NodeDataManager::setPathPublisher( const ros::Publisher& pub )
-{
-  // usually was "/mish/pose_nodes"
-  pub_path_opt = pub;
-}
-
-
-
-void NodeDataManager::publishLastNNodes( int n )
-{
-    visualization_msgs::Marker marker ;
-    RosMarkerUtils::init_camera_marker( marker, .8 );
-
-    node_mutex.lock();
-    int len = node_pose.size();
-    node_mutex.unlock();
-
-    int start, end;
-    if( n<= 0 )
-        start = 0;
-    else
-        start = max(0,len-n);
-
-    end = len;
-
-    for( int i=start ; i<end ; i++ )
     {
-        // node_mutex.lock();
-        Matrix4d w_T_c = node_pose[i];
-        // node_mutex.unlock();
-        // cout << "publish "<< i << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
-        RosMarkerUtils::setpose_to_marker( w_T_c, marker );
-        RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.0, marker );
-        marker.id = i;
-        marker.ns = "vio_kf_pose";
-
-        pub_pgraph.publish( marker );
-    }
-}
-
-void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
-{
-    // this is a cost effective way to visualize camera path
-    visualization_msgs::Marker marker;
-    RosMarkerUtils::init_line_marker( marker );
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x *= 2;
-    marker.ns = ns;
-
-
-    std_msgs::ColorRGBA C1;
-    C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
-
-    marker.points.clear();
-    marker.colors.clear();
-    for( int i=0 ; i<w_T_ci.size() ; i++ )
-    {
-        geometry_msgs::Point pt;
-        pt.x = (w_T_ci[i])(0,3);
-        pt.y = (w_T_ci[i])(1,3);
-        pt.z = (w_T_ci[i])(2,3);
-
-        marker.points.push_back( pt );
-        marker.colors.push_back( C1 );
+        std::lock_guard<std::mutex> lk(node_mutex);
+        cout << "Nodes: pose,cov,stamps=" << node_pose.size() << "," << node_timestamps.size() << "," << node_pose_covariance.size() ;
     }
 
-    pub_pgraph.publish( marker );
-
-
-}
-
-
-void NodeDataManager::publishNodesAsLineStrip( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual  )
-{
-    assert( idx_partition <= w_T_ci.size() );
-
-
-    // this is a cost effective way to visualize camera path
-    visualization_msgs::Marker marker;
-    RosMarkerUtils::init_line_marker( marker );
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x = 0.02;
-
-    std_msgs::ColorRGBA C1;
-    C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
-    std_msgs::ColorRGBA C2;
-    C2.r = r1; C2.g=g1; C2.b=b1; C2.a = 0.8;
-
-    marker.points.clear();
-    marker.colors.clear();
-    marker.id = 0;
-    marker.ns = ns;
-    for( int i=0 ; i< idx_partition ; i++ )
     {
-        geometry_msgs::Point pt;
-        pt.x = (w_T_ci[i])(0,3);
-        pt.y = (w_T_ci[i])(1,3);
-        pt.z = (w_T_ci[i])(2,3);
-
-        marker.points.push_back( pt );
-        marker.colors.push_back( C1 );
+        std::lock_guard<std::mutex> lk(edge_mutex);
+        cout << "\tEdges: pair,weights,edge_pose,description_string=" << loopclosure_edges.size() << "," << loopclosure_edges_goodness.size() << "," << loopclosure_p_T_c.size() << "," << loopclosure_description.size();
     }
-
-    for( int i=idx_partition; i<w_T_ci.size() ; i++ )
-    {
-        geometry_msgs::Point pt;
-        pt.x = (w_T_ci[i])(0,3);
-        pt.y = (w_T_ci[i])(1,3);
-        pt.z = (w_T_ci[i])(2,3);
-
-        marker.points.push_back( pt );
-        marker.colors.push_back( C2 );
-    }
-
-    pub_pgraph.publish( marker );
-
-    if( enable_camera_visual )
-    {
-        int last_idx = w_T_ci.size() - 1;
-        visualization_msgs::Marker marker2 ;
-        RosMarkerUtils::init_camera_marker( marker2, 10 );
-        RosMarkerUtils::setpose_to_marker( w_T_ci[last_idx], marker2 );
-        RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
-        marker2.scale.x = 0.02;
-        marker2.id = 0;
-        marker2.ns = ns+string("_cam_visual");
-        pub_pgraph.publish( marker2 );
-    }
-
-}
-
-
-
-void NodeDataManager::publishEdgesAsLineArray( int n )
-{
-    int start, end;
-    edge_mutex.lock();
-    int len = loopclosure_edges.size();
-    edge_mutex.unlock();
-
-    if( n<= 0 )
-        start = 0;
-    else
-        start = max( 0, len-n );
-
-    end = len;
-
-    // make a line marker
-    visualization_msgs::Marker marker;
-    RosMarkerUtils::init_line_marker( marker );
-
-    for( int i=start; i<end ; i++ )
-    {
-        edge_mutex.lock();
-        int idx_node_prev = loopclosure_edges[i].first ;
-        int idx_node_curr = loopclosure_edges[i].second;
-        edge_mutex.unlock();
-
-        node_mutex.lock();
-        Vector3d w_t_prev = node_pose[ idx_node_prev ].col(3).head(3);
-        Vector3d w_t_curr = node_pose[ idx_node_curr ].col(3).head(3);
-        node_mutex.unlock();
-
-
-        geometry_msgs::Point pt;
-        pt.x = w_t_prev(0);
-        pt.y = w_t_prev(1);
-        pt.z = w_t_prev(2);
-        marker.points.push_back( pt );
-        pt.x = w_t_curr(0);
-        pt.y = w_t_curr(1);
-        pt.z = w_t_curr(2);
-        marker.points.push_back( pt );
-
-    }
-    marker.ns = "loop_closure_edges_ary";
-    marker.id = 0;
-    RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.2, marker );
-    marker.scale.x = 0.03;
-    pub_pgraph.publish( marker );
-
-}
-
-void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b )
-{
-    visualization_msgs::Marker marker ;
-    RosMarkerUtils::init_camera_marker( marker, .6 );
-
-    for( int i=0 ; i<w_T_ci.size() ; i++ )
-    {
-        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
-        RosMarkerUtils::setcolor_to_marker( r,g,b, marker );
-        marker.id = i;
-        marker.ns = ns; //"opt_kf_pose";
-
-        pub_pgraph.publish( marker );
-    }
-}
-
-
-
-
-
-void NodeDataManager::publishNodes( vector<Matrix4d> w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 )
-{
-    assert( idx_partition <= w_T_ci.size() );
-
-    visualization_msgs::Marker marker ;
-    RosMarkerUtils::init_camera_marker( marker, .6 );
-
-    for( int i=0 ; i<idx_partition ; i++ )
-    {
-        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
-        RosMarkerUtils::setcolor_to_marker( r,g,b, marker );
-        marker.id = i;
-        marker.ns = ns; //"opt_kf_pose";
-
-        pub_pgraph.publish( marker );
-    }
-
-    for( int i=idx_partition ; i<w_T_ci.size() ; i++ )
-    {
-        RosMarkerUtils::setpose_to_marker( w_T_ci[i], marker );
-        RosMarkerUtils::setcolor_to_marker( r1,g1,b1, marker );
-        marker.id = i;
-        marker.ns = ns; //"opt_kf_pose";
-
-        pub_pgraph.publish( marker );
-    }
-}
-
-void NodeDataManager::publishPath( vector<Matrix4d> w_T_ci, int start, int end  )
-{
-
-    assert( start >=0 && start <= w_T_ci.size() && end >=0 && end <= w_T_ci.size() && start < end  );
-
-
-    nav_msgs::Path path;
-    path.header.stamp = ros::Time::now();
-    path.header.frame_id = "world";
-
-    for( int i=start ; i<end ; i++ )
-    {
-        geometry_msgs::PoseStamped pose_stamped;
-        // pose_stamped.header = path.header;  //TODO. set correct timestamp at each
-
-        ros::Time stamp;
-        bool __status = getNodeTimestamp( i, stamp  );
-        assert( __status );
-        pose_stamped.header.stamp = stamp;
-        pose_stamped.header.frame_id = "world";
-
-        Quaterniond quat( w_T_ci[i].topLeftCorner<3,3>() );
-
-
-        pose_stamped.pose.orientation.w = quat.w();
-        pose_stamped.pose.orientation.x = quat.x();
-        pose_stamped.pose.orientation.y = quat.y();
-        pose_stamped.pose.orientation.z = quat.z();
-
-        pose_stamped.pose.position.x = w_T_ci[i](0,3);
-        pose_stamped.pose.position.y = w_T_ci[i](1,3);
-        pose_stamped.pose.position.z = w_T_ci[i](2,3);
-
-        path.poses.push_back( pose_stamped );
-
-
-    }
-    pub_path_opt.publish( path );
-}
-
-void NodeDataManager::publishPath( nav_msgs::Path path )
-{
-    pub_path_opt.publish( path );
-}
-
-
-void NodeDataManager::publishLastNEdges( int n )
-{
-    int start, end;
-    edge_mutex.lock();
-    int len = loopclosure_edges.size();
-    edge_mutex.unlock();
-
-    if( n<= 0 )
-        start = 0;
-    else
-        start = max( 0, len-n );
-
-    end = len;
-
-    for( int i=start; i<end ; i++ )
-    {
-        edge_mutex.lock();
-        int idx_node_prev = loopclosure_edges[i].first ;
-        int idx_node_curr = loopclosure_edges[i].second;
-        edge_mutex.unlock();
-
-        node_mutex.lock();
-        Vector3d w_t_prev = node_pose[ idx_node_prev ].col(3).head(3);
-        Vector3d w_t_curr = node_pose[ idx_node_curr ].col(3).head(3);
-        node_mutex.unlock();
-
-
-        // make a line marker
-        visualization_msgs::Marker marker;
-        RosMarkerUtils::init_line_marker( marker, w_t_prev, w_t_curr );
-        marker.id = i;
-        marker.ns = "loop_closure_edges";
-        RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.2, marker );
-
-        pub_pgraph.publish( marker );
-    }
+    cout << endl;
 }
 
 /////////////////////// Utility
 // Loop over each node and return the index of the node which is clossest to the specified stamp
+// This function is not thread-safe. You need to assure thread safety yourself for this.
 int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp )
 {
   ros::Duration diff;
+  // cout << "find stamp=" << std::setprecision(20) << stamp.toSec();
+  // cout << "\t|global_nodes_stamps|="<< global_nodes_stamps.size() ;
+  // cout << endl;
+
+  int to_return = -1;
   for( int i=0 ; i<global_nodes_stamps.size() ; i++ )
   {
     diff = global_nodes_stamps[i] - stamp;
 
     // cout << i << " "<< diff.sec << " " << diff.nsec << endl;
 
-    if( diff < ros::Duration(0.0001) && diff > ros::Duration(-0.0001) ){
-      return i;
+    if( (diff.sec == 0  &&  abs(diff.nsec) < 1000000) || (diff.sec == -1  &&  diff.nsec > (1000000000-1000000) )  ) {
+        // cout << "NodeDataManager::find_indexof_node " << i << " "<< diff.sec << " " << diff.nsec << endl;
+        return i;
+        to_return = i;
     }
+
+    // if( diff < ros::Duration(0.0001) && diff > ros::Duration(-0.0001) ){
+    //   return i;
+    // }
   }//TODO: the duration can be a fixed param. Basically it is used to compare node timestamps.
   // ROS_INFO( "Last Diff=%d:%d. Cannot find specified timestamp in nodelist. ", diff.sec,diff.nsec);
-  return -1;
+
+  // return -1;
+
+  // cout << "returned idx=" << to_return << endl;
+  return to_return;
 }
 
 
@@ -701,7 +410,7 @@ void NodeDataManager::reset_node_info_data()
 
 
 ////////////////////// Save Data to file for analysis //////////////
-
+/*
 void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
 {
 
@@ -724,6 +433,7 @@ void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
     for( int i=0 ; i<raw_data_size ; i++ )
         cout << loaded_data[i] << " ";
 }
+
 
 bool NodeDataManager::loadFromDebug( const string& base_path, const vector<bool>& edge_mask )
 {
@@ -867,22 +577,22 @@ bool NodeDataManager::saveForDebug( const string& base_path )
     // Write Info on Nodes
     vector<unsigned int> shape;
 
-    /* // examples with cnpy
-    // Remember than eigen internally stores data as column major,
-    cout << "node_pose_0\n" << node_pose[0] << endl;
-    shape = {4,4};
-    cnpy::npy_save( base_path+"/graph_data.npy", node_pose[0].data(),  &shape[0], 2, "w" );
-    cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
-
-
-    // load the saved data
-    cnpy::NpyArray arr = cnpy::npy_load( base_path+"/graph_data.npy" );
-    // _print_info_on_npyarray( arr );
-
-    // Matrix4d M;
-    Map<Matrix4d> M( (double*)arr.data );
-    cout << "M\n" << M << endl;
-    */
+    //  // examples with cnpy
+    // // Remember than eigen internally stores data as column major,
+    // cout << "node_pose_0\n" << node_pose[0] << endl;
+    // shape = {4,4};
+    // cnpy::npy_save( base_path+"/graph_data.npy", node_pose[0].data(),  &shape[0], 2, "w" );
+    // cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
+    //
+    //
+    // // load the saved data
+    // cnpy::NpyArray arr = cnpy::npy_load( base_path+"/graph_data.npy" );
+    // // _print_info_on_npyarray( arr );
+    //
+    // // Matrix4d M;
+    // Map<Matrix4d> M( (double*)arr.data );
+    // cout << "M\n" << M << endl;
+    //
     int hash_nodes = getNodeLen();
     int hash_edges = getEdgeLen();
 
@@ -944,7 +654,7 @@ bool NodeDataManager::saveForDebug( const string& base_path )
 
 }
 
-
+*/
 
 bool NodeDataManager::saveAsJSON( const string& base_path )
 {
@@ -985,6 +695,7 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
     }
 
 
+
     // Edge Info
     for( int i=0; i<getEdgeLen() ; i++ )
     {
@@ -1015,7 +726,9 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
 
 
     // Save file
+    cout << TermColor::GREEN() << "[NodeDataManager::saveAsJSON]\n" <<  all_info["meta_data"] << endl;
     cout << "Write : "<< base_path+"/log_posegraph.json"<< endl;
+    cout << "Done! "<< TermColor::RESET() << endl;
     std::ofstream outf(base_path+"/log_posegraph.json");
     if( !outf.is_open() ) {
         cout << "[ERROR saveAsJSON] Cannot open file\n";
@@ -1024,6 +737,132 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
 
     outf << std::setw(4) << all_info << std::endl;
     return true;
+
+
+}
+
+
+bool NodeDataManager::loadFromJSON( const string& base_path, const vector<bool>& edge_mask ) //< Loads what saveForDebug() writes. edge_mask: a vector of 0s, 1s indicating if this edge has to be included or not. edge_mask.size() == 0 will load all
+{
+    cout << "##########################################\n";
+    cout << " NodeDataManager::loadFromJSON : "<< base_path << endl;
+    cout << "##########################################\n";
+
+    cout << "edge_mask.size()="<< edge_mask.size() << endl;
+    for( int i=0 ; i<edge_mask.size() ; i++ )
+        cout << edge_mask[i];
+    cout << endl;
+
+    reset_node_info_data();
+    reset_edge_info_data();
+
+
+    // Open JSON file
+    cout << TermColor::GREEN() << "Open JSON : "<< base_path+"/log_posegraph.json"<< TermColor::RESET() << endl;
+    std::ifstream i_file(base_path+"/log_posegraph.json");
+    if( !i_file.is_open() ) {
+        cout << TermColor::RED() << "[ERROR loadFromJSON]Cannot open json file. Perhaps file not found" << TermColor::RESET() << endl;
+        return false;
+    }
+    json all_info;
+    i_file >> all_info;
+
+    cout << all_info["meta_data"] << endl;
+    int getEdgeLen = all_info["meta_data"]["getEdgeLen"];
+    int getNodeLen = all_info["meta_data"]["getNodeLen"];
+    if( getEdgeLen != all_info["loopedges"].size() || getNodeLen != all_info["nodes"].size() )
+    {
+        cout << "The meta data and the json file is not consistant\n";
+        cout << "meta[getEdgeLen]" << getEdgeLen << "\tmeta[getNodeLen]" << getNodeLen ;
+        cout << "all_info[\"loopedges\"].size()" << all_info["loopedges"].size() ;
+        cout << "\tall_info[\"nodes\"].size()" << all_info["nodes"].size() ;
+        return false;
+    }
+
+    // Load Nodes
+    for( int i=0 ; i<all_info["nodes"].size() ; i++ )
+    {
+        json node_json = all_info["nodes"][i];
+        // cout << node_json << endl;
+
+        // lock
+        std::lock_guard<std::mutex> lk(node_mutex);
+
+
+        // timestamp
+        ros::Time node_time( all_info["nodes"][i]["timestamp"] );
+        node_timestamps.push_back( node_time );
+
+        // pose
+        Matrix4d wTc;
+        PoseManipUtils::string_to_eigenmat( all_info["nodes"][i]["wTc"], wTc );
+        node_pose.push_back( wTc );
+        // cout << i<< "\n" << wTc << endl;
+
+
+        // cov
+        Matrix<double,6,6> cov;
+        PoseManipUtils::string_to_eigenmat( node_json["cov"], cov );
+        node_pose_covariance.push_back( cov );
+    }
+    cout << TermColor::GREEN() << "Loaded Nodes: this->getNodeLen()=" << this->getNodeLen() << TermColor::RESET() << endl;
+
+
+    // Load Edges
+    for( int i=0 ; i<all_info["loopedges"].size() ; i++ )
+    {
+        if( edge_mask.size() > 0 && edge_mask[i] == false )
+            continue;// dont load the edge if edge_mask has non zero size and mask is true.
+
+
+        // cout << "---\n";
+        json loopedge_json = all_info["loopedges"][i];
+        // cout << loopedge_json << endl;
+
+        std::lock_guard<std::mutex> lk(edge_mutex);
+
+        // load stamp0, stamp1
+        ros::Time stamp0( loopedge_json["timestamp0"] );
+        ros::Time stamp1( loopedge_json["timestamp1"] );
+        loopclosure_edges_timestamps.push_back( std::make_pair(stamp0,stamp1) );
+        // cout << stamp0 << "\t" << stamp1 << endl;
+
+        // load id
+        int idx0 = loopedge_json["idx0"];
+        int idx1 = loopedge_json["idx1"];
+        loopclosure_edges.push_back( make_pair(idx0, idx1) );
+        // cout << idx0 << "\t" << idx1 << endl;
+
+        // load weight & description
+        loopclosure_edges_goodness.push_back( loopedge_json["weight"] );
+        loopclosure_description.push_back( loopedge_json["description"] );
+        // cout << loopedge_json["weight"] << "\t" << loopedge_json["description"] << endl;
+
+
+        // load relative pose
+        Matrix4d b_T_a;
+        PoseManipUtils::string_to_eigenmat( loopedge_json["b_T_a"], b_T_a );
+        loopclosure_p_T_c.push_back( b_T_a );
+        // cout << i<< " b_T_a\n" << b_T_a << endl;
+
+
+        // verify that these timestamp exists in node_timestamps and are equal to claimed
+        if( node_timestamps[idx0] != stamp0 ) {
+            cout << "[Insonsistent json] node_timestamps[idx0] != stamp0 \n";
+            cout << "node_timestamps[idx0]=" << node_timestamps[idx0] << endl;
+            cout << "stamp0=" << stamp0 << endl;
+            exit(1);
+        }
+        if( node_timestamps[idx1] != stamp1 ) {
+            cout << "[Insonsistent json] node_timestamps[idx1] != stamp1 \n";
+            cout << "node_timestamps[idx1]=" << node_timestamps[idx1] << endl;
+            cout << "stamp1=" << stamp1 << endl;
+            exit(1);
+        }
+
+
+    }
+    cout << TermColor::GREEN() << "Loaded LoopEdges: this->getEdgeLen()=" << this->getEdgeLen() << TermColor::RESET() << endl;
 
 
 }

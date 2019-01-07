@@ -54,6 +54,7 @@ using namespace Eigen;
 
 #include "NodeDataManager.h"
 #include "PoseGraphSLAM.h"
+#include "VizPoseGraph.h"
 
 void periodic_print_len( const NodeDataManager * manager )
 {
@@ -67,7 +68,7 @@ void periodic_print_len( const NodeDataManager * manager )
 }
 
 
-void periodic_publish_VIO( const NodeDataManager * manager )
+void periodic_publish_VIO( const VizPoseGraph * manager )
 {
     ros::Rate loop_rate(20);
     while( ros::ok() )
@@ -82,7 +83,7 @@ void periodic_publish_VIO( const NodeDataManager * manager )
 
 
 // also looks at slam->solvedUntil() to ot repeatedly update the entire path
-void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, const PoseGraphSLAM * slam )
+void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
 {
     ros::Rate loop_rate0(20);
     int prev_solved_until = 0, solved_until=0;
@@ -107,7 +108,8 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
             for( int i=0 ; i<L ; i++ )
             {
                 Matrix4d M;
-                slam->opt_pose( i, M );
+                // slam->opt_pose( i, M );
+                slam->getNodePose( i, M );
                 optimized_w_T_ci.push_back( M );
             }
         }
@@ -149,13 +151,15 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
         // manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7 );
         // manager->publishNodes( optimized_w_T_ci, "opt_kf_pose", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
         // manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7  );
-        manager->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip", 1.0, 0.1, 0.7, solved_until, 0., 1.0, 0.0 );
+        viz->publishNodesAsLineStrip( optimized_w_T_ci, "opt_kf_pose_linestrip",
+                                        1.0, 0.1, 0.7,
+                                        solved_until, 1., 1.0, 0.0 );
 
 
         // in nav_msgs::Path only publish last 5
         int end = optimized_w_T_ci.size();
         int start = max( 0, end - 5 );
-        manager->publishPath( optimized_w_T_ci, start, end );
+        viz->publishPath( optimized_w_T_ci, start, end );
 
 
         loop_rate0.sleep();
@@ -166,8 +170,11 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
 
 }
 
+
+// not in use removal
+#if 0
 // Simple function to brute-force publish all nodes
-void periodic_publish_optimized_poses( const NodeDataManager * manager, const PoseGraphSLAM * slam )
+void periodic_publish_optimized_poses( const VizPoseGraph * manager, const PoseGraphSLAM * slam )
 {
     ros::Rate loop_rate0(20);
     while( ros::ok() )
@@ -196,26 +203,26 @@ void periodic_publish_optimized_poses( const NodeDataManager * manager, const Po
         vector<Matrix4d> optimized_w_T_ci;
         slam->getAllNodePose( optimized_w_T_ci ); // these will be only the poses which are in slam's list. There could be some additional nodes not in slam's list since the ceres::Solve() takes a long time.
 
-        /*
-        // Collect additional poses which are not yet added to pose graph optimization
-        // cout << "[PeriodicPublish] optimized_w_T_ci.size()=" << optimized_w_T_ci.size() << " ";
-        // cout << "manager->getNodeLen()="<<manager->getNodeLen() << endl;
-        if( manager->getNodeLen() > optimized_w_T_ci.size() && optimized_w_T_ci.size() > 0 ) {
-            Matrix4d w_T_last = optimized_w_T_ci[ optimized_w_T_ci.size() - 1 ]; // optimized pose for last corrected node
-            Matrix4d w_M_last;
-            manager->getNodePose(  optimized_w_T_ci.size() - 1,  w_M_last ); // ger VIO pose of the last corrected. This is use to get relative pose of current node wrt this node
-            for( int a= optimized_w_T_ci.size() ; a<manager->getNodeLen() ; a++ )
-            {
-                Matrix4d w_M_c; // VIO pose of current.
-                manager->getNodePose( a, w_M_c );
 
-                Matrix4d last_M_c; // pose of current wrt last infered from VIO
-                last_M_c = w_M_last.inverse() * w_M_c;
-
-                Matrix4d int__w_TM_c = w_T_last * last_M_c  ; // using the corrected one for 0->last and using VIO for last->current.
-                optimized_w_T_ci.push_back( int__w_TM_c );
-            }
-        }*/
+        // // Collect additional poses which are not yet added to pose graph optimization
+        // // cout << "[PeriodicPublish] optimized_w_T_ci.size()=" << optimized_w_T_ci.size() << " ";
+        // // cout << "manager->getNodeLen()="<<manager->getNodeLen() << endl;
+        // if( manager->getNodeLen() > optimized_w_T_ci.size() && optimized_w_T_ci.size() > 0 ) {
+        //     Matrix4d w_T_last = optimized_w_T_ci[ optimized_w_T_ci.size() - 1 ]; // optimized pose for last corrected node
+        //     Matrix4d w_M_last;
+        //     manager->getNodePose(  optimized_w_T_ci.size() - 1,  w_M_last ); // ger VIO pose of the last corrected. This is use to get relative pose of current node wrt this node
+        //     for( int a= optimized_w_T_ci.size() ; a<manager->getNodeLen() ; a++ )
+        //     {
+        //         Matrix4d w_M_c; // VIO pose of current.
+        //         manager->getNodePose( a, w_M_c );
+        //
+        //         Matrix4d last_M_c; // pose of current wrt last infered from VIO
+        //         last_M_c = w_M_last.inverse() * w_M_c;
+        //
+        //         Matrix4d int__w_TM_c = w_T_last * last_M_c  ; // using the corrected one for 0->last and using VIO for last->current.
+        //         optimized_w_T_ci.push_back( int__w_TM_c );
+        //     }
+        // }
         /// end of additonal poses
 
 
@@ -225,7 +232,7 @@ void periodic_publish_optimized_poses( const NodeDataManager * manager, const Po
         loop_rate.sleep();
     }
 }
-
+#endif
 
 
 
@@ -259,19 +266,25 @@ int main( int argc, char ** argv)
     string marker_topic = string( "visualization_marker");
     ROS_INFO( "Publish to %s", marker_topic.c_str() );
     ros::Publisher pub = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
-    manager->setVisualizationPublisher( pub );
 
 
     //--- Optimzied Path Publisher ---//
     string opt_path_topic = string( "opt_path");
     ROS_INFO( "Publish to %s", opt_path_topic.c_str() );
     ros::Publisher pub_path = nh.advertise<nav_msgs::Path>( opt_path_topic , 1000 );
-    manager->setPathPublisher( pub_path );
+
+
+    // another class for viz.
+    VizPoseGraph * viz = new VizPoseGraph( manager );
+    viz->setVisualizationPublisher( pub );
+    viz->setPathPublisher( pub_path );
 
 
     // another class for the core pose graph optimization
     PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
-    std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    slam->new_optimize6DOF_enable();
+    std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
 
 
@@ -279,7 +292,7 @@ int main( int argc, char ** argv)
     // std::thread th1( periodic_print_len, manager );
     // std::thread th2( periodic_publish_VIO, manager );
     // std::thread th3( periodic_publish_optimized_poses, manager, slam );
-    std::thread th3( periodic_publish_optimized_poses_smart, manager, slam );
+    std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
 
 
 
@@ -290,10 +303,10 @@ int main( int argc, char ** argv)
     while(ros::ok())
     {
         ros::spinOnce();
-
-
         loop_rate.sleep();
     }
+
+    slam->new_optimize6DOF_disable();
 
     // th1.join();
     // th2.join();
@@ -307,19 +320,20 @@ int main( int argc, char ** argv)
 
     // rm -rf /Bulk_Data/_tmp_posegraph
     string cmd_rm = "rm -rf "+DATA_PATH;
-    cout << cmd_rm ;
+    cout << cmd_rm << endl;
     std::system( cmd_rm.c_str() );
 
 
     // mkdir -p /Bulk_Data/_tmp_posegraph
     string cmd_mkdir = "mkdir -p "+DATA_PATH;
-    cout << cmd_mkdir ;
+    cout << cmd_mkdir  << endl;
     std::system( cmd_mkdir.c_str() );
 
 
     // save
-    manager->saveForDebug( DATA_PATH );
+    // manager->saveForDebug( DATA_PATH );
     manager->saveAsJSON( DATA_PATH );
+    slam->saveAsJSON( DATA_PATH );
 
 
     return 0;

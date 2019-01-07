@@ -241,3 +241,77 @@ void PoseManipUtils::vec_to_cross_matrix( double a, double b, double c, Matrix3d
     Vector3d t(a,b,c);
     vec_to_cross_matrix( t, A_x );
 }
+
+
+
+std::vector<std::string>
+PoseManipUtils::split( std::string const& original, char separator )
+{
+    std::vector<std::string> results;
+    std::string::const_iterator start = original.begin();
+    std::string::const_iterator end = original.end();
+    std::string::const_iterator next = std::find( start, end, separator );
+    while ( next != end ) {
+        results.push_back( std::string( start, next ) );
+        start = next + 1;
+        next = std::find( start, end, separator );
+    }
+    results.push_back( std::string( start, next ) );
+    return results;
+}
+
+static bool PoseManipUtils::string_to_eigenmat( const string mat_string, Matrix4d& mat )
+{
+    auto mat_string_split = split( mat_string, ';' );
+
+    if( mat_string_split.size() != 4 && split( mat_string_split[0] , ',' ).size() != 4 )
+    {
+        cout << "[error PoseManipUtils::string_to_eigenmat] The string you requested to convert does not appear to be matrix4d\n";
+        cout << "You input: "<< mat_string << endl;
+        return false;
+    }
+
+    // cout << "There appear to be "<< mat_string_split.size() << " rows\n";
+    for( int i=0 ; i<mat_string_split.size(); i++ ) //loop over rows
+    {
+        auto mat_string_split_split = split( mat_string_split[i] , ',' );
+        // cout << "row["<<i<<"] has "<< mat_string_split_split.size() << " elements\n";
+
+        for( int j=0 ; j<mat_string_split_split.size() ; j++ )
+            mat( i, j ) = stod( mat_string_split_split[j]  );
+    }
+    // cout << "final matrix was: "<< mat << endl;
+    return true;
+
+}
+
+
+static bool PoseManipUtils::string_to_eigenmat( const string mat_string, Matrix<double,6,6>& mat )
+{
+    auto mat_string_split = split( mat_string, ';' );
+
+    if( mat_string_split.size() != 6 && split( mat_string_split[0] , ',' ).size() != 6 )
+    {
+        cout << "[error PoseManipUtils::string_to_eigenmat] The string you requested to convert does not appear to be matrix<double,6,6>\n";
+        cout << " mat_string_split.size() = " <<  mat_string_split.size() << "\t";
+        cout << "split( mat_string_split[0] , ',' ).size()=" << split( mat_string_split[0] , ',' ).size()<< endl;
+        cout << "You input: "<< mat_string << endl;
+        return false;
+    }
+
+    // cout << "There appear to be "<< mat_string_split.size() << " rows\n";
+    for( int i=0 ; i<mat_string_split.size(); i++ ) //loop over rows
+    {
+        // cout << "row: " <<  mat_string_split[i]<< endl;
+        auto mat_string_split_split = split( mat_string_split[i] , ',' );
+        // cout << "row["<<i<<"] has "<< mat_string_split_split.size() << " elements\n";
+
+        for( int j=0 ; j<mat_string_split_split.size() ; j++ ) {
+            // cout << " mat_string_split_split[j]=" <<  mat_string_split_split[j]<< endl;
+            mat( i, j ) = (double)stold( mat_string_split_split[j]  );
+        }
+    }
+    // cout << "final matrix was: "<< mat << endl;
+    return true;
+
+}

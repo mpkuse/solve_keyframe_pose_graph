@@ -256,7 +256,10 @@ int main( int argc, char ** argv)
 
     // Load file (Pose Graph) all edges
     edge_mask.clear();
-    global_manager->loadFromDebug(DATA_PATH, edge_mask ); // load all edges
+    // global_manager->loadFromDebug(DATA_PATH, edge_mask ); // load all edges
+    global_manager->loadFromJSON( DATA_PATH, edge_mask );
+
+
 
     for( int i=0 ; i<global_manager->getEdgeLen() ; i++ ) {
         // edge_mask.push_back( false );
@@ -326,7 +329,9 @@ int main( int argc, char ** argv)
         // Load Pose graph in manager considering edge_mask
         if( edge_mask_has_changed )
         {
-            manager->loadFromDebug(DATA_PATH, edge_mask ); // load all edges
+            // manager->loadFromDebug(DATA_PATH, edge_mask ); // load all edges
+            manager->loadFromJSON( DATA_PATH, edge_mask );
+
             slam->deallocate_optimization_variables();
             slam->optimize6DOF( );
             edge_mask_has_changed = false;

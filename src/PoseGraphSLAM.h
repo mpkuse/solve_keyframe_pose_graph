@@ -41,43 +41,81 @@
 #include "ScreenColors.h"
 
 #include "utils/PoseManipUtils.h"
+#include "utils/TermColor.h"
+#include "utils/ElapsedTime.h"
 
 using namespace std;
 using namespace Eigen;
 
+
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+
 class PoseGraphSLAM
 {
 public:
-    PoseGraphSLAM( NodeDataManager* _manager );
+    PoseGraphSLAM( const NodeDataManager* _manager );
+    ~PoseGraphSLAM( ) { deallocate_optimization_variables(); }
     // void stop() { run = false; }
 
     // This is intended to be run in a separate thread.
     void optimize6DOF();
 
+    // This is the newer implementation of optimize6DOF().
+    // Don't over engineer this. It runs an inf-loop and monitors manager->getNodeLen() and manager->getEdgeLen().
+    // Based on those queues it sets up (and solves) the pose-graph-slam problem.
+    void new_optimize6DOF();
+    void new_optimize6DOF_enable() { new_optimize6DOF_isEnabled=true; }
+    void new_optimize6DOF_disable() { new_optimize6DOF_isEnabled=false; }
+
+
     // Get the optimized pose at node i. This function is thread-safe
-    const Matrix4d getNodePose( int i );
-    int nNodes();
-    void getAllNodePose( vector<Matrix4d>& vec_w_T_ci );
+    const Matrix4d getNodePose( int i ) const;
+    void getNodePose( int i, Matrix4d& ) const;
+    int nNodes() const;
+    void getAllNodePose( vector<Matrix4d>& vec_w_T_ci ) const;
 
 
-    void opt_pose( int i, Matrix4d& );
 
     int solvedUntil() { return solved_until; } // returns the node index until which solve() has operated. Thread-safe with atomics
 
 
     void set_inf_loop( bool val ) { inf_loop = val; }
     void deallocate_optimization_variables();
-private:
-    atomic<int> solved_until;
 
+    // Writes out the optimization variables. Writes the file: `log_optimized_poses.json`
+    bool saveAsJSON(const string base_path);
+
+private:
+    // global variables
+    atomic<bool> new_optimize6DOF_isEnabled;
     const NodeDataManager * manager;
 
     // Optimization variables
-    std::mutex * mutex_opt_vars;
-    vector<double*> opt_quat;
+    mutable std::mutex  mutex_opt_vars;
+    vector<double*> opt_quat; // stored as x,y,z,w
     vector<double*> opt_t;
 
+    // step-1: new i_opt_quat[5], new i_opt_t[5]
+    // step-2: pose--> i_opt_quat, i_opt_t
+    // step-3: opt_quat.push_back( i_opt_quat ); opt_t.push_back( i_opt_t )
+    void allocate_and_append_new_opt_variable_withpose( const Matrix4d& pose );
+    const int n_opt_variables( ) const;
+    double * get_raw_ptr_to_opt_variable_q( int i ) const;
+    double * get_raw_ptr_to_opt_variable_t( int i ) const;
+
+
+    atomic<int> solved_until;
     bool inf_loop = true;
+
+
+    // The optimization problem - CERES
+    ceres::Problem problem;
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    ceres::LocalParameterization * eigenquaternion_parameterization=NULL;
+    ceres::LossFunction * cauchy_loss = NULL;
+    void init_ceres_optimization_problem();
 
 
 };
@@ -258,6 +296,9 @@ public:
     template <typename T>
     bool operator() ( const T* const q1, const T* const t1,   const T* const q2, const T* const t2, T* residue_ptr ) const
     {
+        // Eigen:
+        // Note the order of the arguments: the real w coefficient first,
+        // while internally the coefficients are stored in the following order: [x, y, z, w]
 
         // q1,t1 --> w_T_c1
         Eigen::Map<const Eigen::Matrix<T,3,1> > p_1( t1 );
