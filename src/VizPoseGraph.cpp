@@ -14,6 +14,11 @@ void VizPoseGraph::setPathPublisher( const ros::Publisher& pub )
   pub_path_opt = pub;
 }
 
+void VizPoseGraph::setOdometryPublisher( const ros::Publisher& pub )
+{
+  // usually was "/mish/pose_nodes"
+  pub_odometry_opt = pub;
+}
 
 
 
@@ -50,7 +55,8 @@ void VizPoseGraph::publishLastNNodes( int n )
 
 
 
-void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b )
+void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
+    const string& ns, float r, float g, float b )
 {
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
@@ -84,7 +90,11 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, cons
 
 
 
-void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1, bool enable_camera_visual  )
+void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
+    const string& ns, float r, float g, float b,
+    int idx_partition,
+    float r1, float g1, float b1,
+    bool enable_camera_visual  )
 {
     assert( idx_partition <= w_T_ci.size() );
 
@@ -280,6 +290,34 @@ void VizPoseGraph::publishPath( const vector<Matrix4d>& w_T_ci, int start, int e
 
     }
     pub_path_opt.publish( path );
+
+
+}
+
+
+void VizPoseGraph::publishOdometry( const vector<Matrix4d>& w_T_ci )
+{
+    nav_msgs::Odometry odom;
+    int idx_last = w_T_ci.size()-1;
+
+    odom.header.stamp = manager->getNodeTimestamp( idx_last );
+    odom.header.frame_id = "world";
+
+    geometry_msgs::PoseWithCovariance pose;
+
+    Quaterniond quat( w_T_ci[idx_last].topLeftCorner<3,3>() );
+    pose.pose.orientation.w = quat.w();
+    pose.pose.orientation.x = quat.x();
+    pose.pose.orientation.y = quat.y();
+    pose.pose.orientation.z = quat.z();
+
+    pose.pose.position.x = w_T_ci[idx_last](0,3);
+    pose.pose.position.y = w_T_ci[idx_last](1,3);
+    pose.pose.position.z = w_T_ci[idx_last](2,3);
+
+    odom.pose = pose;
+
+    pub_odometry_opt.publish( odom);
 }
 
 

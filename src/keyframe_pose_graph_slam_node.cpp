@@ -160,6 +160,7 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
         int end = optimized_w_T_ci.size();
         int start = max( 0, end - 5 );
         viz->publishPath( optimized_w_T_ci, start, end );
+        viz->publishOdometry( optimized_w_T_ci );
 
 
         loop_rate0.sleep();
@@ -238,7 +239,7 @@ void periodic_publish_optimized_poses( const VizPoseGraph * manager, const PoseG
 
 int main( int argc, char ** argv)
 {
-    ros::init(argc, argv, "keyframe_pose_graph_slam_noe");
+    ros::init(argc, argv, "keyframe_pose_graph_slam_node");
     ros::NodeHandle nh("~");
 
 
@@ -263,7 +264,7 @@ int main( int argc, char ** argv)
 
     // Setup publishers
     //--- Marker ---//
-    string marker_topic = string( "visualization_marker");
+    string marker_topic = string( "viz/visualization_marker");
     ROS_INFO( "Publish to %s", marker_topic.c_str() );
     ros::Publisher pub = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
 
@@ -273,11 +274,17 @@ int main( int argc, char ** argv)
     ROS_INFO( "Publish to %s", opt_path_topic.c_str() );
     ros::Publisher pub_path = nh.advertise<nav_msgs::Path>( opt_path_topic , 1000 );
 
+    //--- Optimzied Odometry Publisher ---//
+    string opt_odometry_topic = string( "opt_odometry");
+    ROS_INFO( "Publish to %s", opt_odometry_topic.c_str() );
+    ros::Publisher pub_odometry_opt = nh.advertise<nav_msgs::Odometry>( opt_odometry_topic , 1000 );
+
 
     // another class for viz.
     VizPoseGraph * viz = new VizPoseGraph( manager );
     viz->setVisualizationPublisher( pub );
     viz->setPathPublisher( pub_path );
+    viz->setOdometryPublisher( pub_odometry_opt );
 
 
     // another class for the core pose graph optimization
@@ -330,10 +337,13 @@ int main( int argc, char ** argv)
     std::system( cmd_mkdir.c_str() );
 
 
+    #define __LOGGING__ 1 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
+    #if __LOGGING__
     // save
     // manager->saveForDebug( DATA_PATH );
     manager->saveAsJSON( DATA_PATH );
     slam->saveAsJSON( DATA_PATH );
+    #endif
 
 
     return 0;
