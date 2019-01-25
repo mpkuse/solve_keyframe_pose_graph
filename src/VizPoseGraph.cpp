@@ -21,7 +21,8 @@ void VizPoseGraph::setOdometryPublisher( const ros::Publisher& pub )
 }
 
 
-
+#if 0
+// TODO removal
 void VizPoseGraph::publishLastNNodes( int n )
 {
     visualization_msgs::Marker marker ;
@@ -52,7 +53,7 @@ void VizPoseGraph::publishLastNNodes( int n )
         pub_pgraph.publish( marker );
     }
 }
-
+#endif
 
 
 void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
@@ -156,7 +157,8 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
 
 
 
-
+// TODO removal
+#if 0
 void VizPoseGraph::publishEdgesAsLineArray( int n )
 {
     int start, end;
@@ -200,7 +202,7 @@ void VizPoseGraph::publishEdgesAsLineArray( int n )
     pub_pgraph.publish( marker );
 
 }
-
+#endif
 
 void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b )
 {
@@ -359,4 +361,73 @@ void VizPoseGraph::publishLastNEdges( int n )
 
         pub_pgraph.publish( marker );
     }
+}
+
+void VizPoseGraph::publishSlamResidueVisual( int n )
+{
+    FalseColors fcolmap;
+    int start, end;
+
+    // odometry residue weights
+    start = 0;
+    end = slam->get_odomedge_residue_info_size();
+    for( int i=start ; i<end ; i++ )
+    {
+        auto m = slam->get_odomedge_residue_info( i );
+        int a = std::get<0>(m);
+        int b = std::get<1>(m);
+        float w = std::get<2>(m);
+        if( abs(a-b) != 1 )
+            continue;
+
+
+        Vector3d w_t_a = manager->getNodePose( a ).col(3).topRows(3);
+        Vector3d w_t_b = manager->getNodePose( b ).col(3).topRows(3);
+
+        visualization_msgs::Marker marker;
+        RosMarkerUtils::init_line_marker( marker, w_t_a, w_t_b );
+        marker.ns = "odom_residues";
+        marker.id = i;
+        // marker.scale.x=0.005;
+
+        cv::Scalar w_color = fcolmap.getFalseColor( w );
+
+
+        RosMarkerUtils::setcolor_to_marker(float(w_color[0])/255., float(w_color[1])/255., float(w_color[2])/255., marker );
+        pub_pgraph.publish( marker );
+    }
+
+
+
+    // loop residue weights
+    start = 0;
+    end = slam->get_loopedge_residue_info_size();
+    for( int i=start ; i<end ; i++ )
+    {
+        auto m = slam->get_loopedge_residue_info( i );
+        int a = std::get<0>(m);
+        int b = std::get<1>(m);
+        // float w = std::get<2>(m);
+        float w = slam->get_loopedge_switching_variable_val( i );
+        // if( abs(a-b) != 1 )
+            // continue;
+
+
+        Vector3d w_t_a = manager->getNodePose( a ).col(3).topRows(3);
+        Vector3d w_t_b = manager->getNodePose( b ).col(3).topRows(3);
+
+        visualization_msgs::Marker marker;
+        RosMarkerUtils::init_line_marker( marker, w_t_a, w_t_b );
+        marker.ns = "loopedge_residues";
+        marker.id = i;
+        // marker.scale.x=0.005;
+
+        cv::Scalar w_color = fcolmap.getFalseColor( w );
+
+
+        RosMarkerUtils::setcolor_to_marker(float(w_color[0])/255., float(w_color[1])/255., float(w_color[2])/255., marker );
+        pub_pgraph.publish( marker );
+    }
+
+
 }

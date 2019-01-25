@@ -116,13 +116,13 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
         ss2 << w_T_c_odom.format(CSVFormat);
         opt_var_i["w_T_c_odom"] = ss2.str();
         opt_var_i["w_T_c_odom_prettyprint"] = PoseManipUtils::prettyprintMatrix4d( w_T_c_odom );
-
-
+        opt_var_i["node_i"] = i;
 
         all_info["PoseGraphSLAM_nodes"].push_back( opt_var_i );
     }
 
 
+    // loop edges
     for( int i=0 ; i<manager->getEdgeLen() ; i++ ) {
         json edgeinfo;
 
@@ -140,9 +140,30 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
         auto getEdgePose_after_opt = this->getNodePose(b).inverse() * this->getNodePose(a);
         edgeinfo["getEdgePose_after_opt"] = PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt );
 
-        all_info["PoseGraphSLAM_edgeinfo"].push_back( edgeinfo );
+
+        // switching_var
+        if( i < n_opt_switch() )
+            edgeinfo["switching_var_after_opt"] = get_raw_ptr_to_opt_switch(i)[0];
+
+        all_info["PoseGraphSLAM_loopedgeinfo"].push_back( edgeinfo );
 
     }
+
+
+    #if 0
+    // odometry edges
+    for( int i=0 ; i<this->get_odomedge_residue_info_size() ; i++ ) {
+        json odom_edge_info;
+
+        auto m = this->get_odomedge_residue_info(i);
+        odom_edge_info["u"] = std::get<0>(m);
+        odom_edge_info["u-f"] = std::get<1>(m);
+        odom_edge_info["weight"] = std::get<2>(m);
+        odom_edge_info["debug_string"] = std::get<3>(m);
+        all_info["PoseGraphSLAM_odom_edge_info"].push_back( odom_edge_info );
+    }
+    #endif
+
 
     cout << TermColor::GREEN() << "[PoseGraphSLAM::saveAsJSON]\n" <<  all_info["meta_data"] << endl;
     cout << "Write : "<< base_path+"/log_optimized_poses.json"<< endl;
@@ -558,11 +579,13 @@ void PoseGraphSLAM::new_optimize6DOF()
                         // cout << "del_yaw = " << __ypr(0) << endl;
                     )
 
+
                     ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
                     problem.AddResidualBlock( cost_function, NULL,
                         get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
                         get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
 
+                    push_back_odomedge_residue_info( std::make_tuple(u,u-f,odom_edge_weight, "N/A") );
                 }
                 __PoseGraphSLAM_new_optimize6DOF_odom_debug( cout << "\\n" << endl; )
             }
@@ -580,7 +603,7 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << " from [" << prev_loopedge_len << ", " << loopedge_len-1 << "]" << TermColor::RESET() << endl;
 
             //##############################
-            // TODO Add loopedges residues for each edge
+            // Add loopedges residues for each edge
             //##############################
             cout <<  TermColor::MAGENTA() << "Add loopedges from [" << prev_loopedge_len << ", " << loopedge_len-1  << "]"<< TermColor::RESET() << endl;
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
@@ -594,10 +617,29 @@ void PoseGraphSLAM::new_optimize6DOF()
                 cout << "\tbTa="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
 
 
+                // ordinary loop edge residue term
+                #if 0
                 ceres::CostFunction * cost_function = SixDOFError::Create( bTa, weight );
                 problem.AddResidualBlock( cost_function, robust_norm,
                     get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
                     get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first)  );
+                #endif
+
+
+                #if 1
+                allocate_and_append_new_edge_switch_var();
+                ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+                problem.AddResidualBlock( cost_function, robust_norm,
+                    get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
+                    get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first),
+                    get_raw_ptr_to_opt_switch(e)
+                );
+                #endif
+
+
+
+                // push_back
+                push_back_loopedge_residue_info( std::make_tuple(paur.first,paur.second,weight, "NA1","NA2") );
             }
 
 
@@ -609,7 +651,9 @@ void PoseGraphSLAM::new_optimize6DOF()
                 int _b = paur.second;
                 cout << _a << "<-->" << _b << "\t";
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
+                cout << "edge_switch_variable=" << get_raw_ptr_to_opt_switch(e)[0] << "\t";
                 cout << "bTa(opt_vars)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
+
 
                 auto getEdgePose_after_opt_manager = manager->getNodePose(_b).inverse() * manager->getNodePose(_a);
                 cout << std::setprecision(20) << "(manager)a_timestamp=" << manager->getNodeTimestamp( _a ).toSec() << "\t" << "b_timestamp=" << manager->getNodeTimestamp(_b).toSec() << endl;
@@ -625,9 +669,11 @@ void PoseGraphSLAM::new_optimize6DOF()
             #if 1
             cout << TermColor::iGREEN() ;
             cout << "solve()\n";
+            ElapsedTime timer; timer.tic();
             ceres::Solve( options, &problem, &summary );
             solved_until = node_len;
             // cout << summary.FullReport() << endl;
+            cout << "Solve() took (milli-sec) : " << timer.toc_milli()  << endl;
             cout << summary.BriefReport() << endl;
             cout << TermColor::RESET() << endl;
             #endif
@@ -642,6 +688,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                 int _a = paur.first;
                 int _b = paur.second;
                 cout << _a << "<-->" << _b << "\t";
+                cout << "edge_switch_variable=" << get_raw_ptr_to_opt_switch(e)[0] << "\t";
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
                 cout << "bTa" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
                 cout << TermColor::RESET() ;
@@ -658,4 +705,46 @@ void PoseGraphSLAM::new_optimize6DOF()
     }
 
     cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::new_optimize6DOF`" << TermColor::RESET() << endl;
+}
+
+
+void PoseGraphSLAM::push_back_odomedge_residue_info( std::tuple<int,int,float,string> m )
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    odometry_edges_terms.push_back( m );
+}
+
+const std::tuple<int,int,float,string>& PoseGraphSLAM::get_odomedge_residue_info( int i) const
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    assert( i>=0 && i<odometry_edges_terms.size() );
+    return odometry_edges_terms[i];
+}
+
+int PoseGraphSLAM::get_odomedge_residue_info_size() const
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    return odometry_edges_terms.size();
+}
+
+
+void PoseGraphSLAM::push_back_loopedge_residue_info( std::tuple<int,int,float,string, string> m )
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    loop_edges_terms.push_back( m );
+}
+
+const std::tuple<int,int,float,string, string>& PoseGraphSLAM::get_loopedge_residue_info(int i) const
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    assert( i>=0 && i<loop_edges_terms.size() );
+    return loop_edges_terms[i];
+
+}
+
+int PoseGraphSLAM::get_loopedge_residue_info_size() const
+{
+    std::lock_guard<std::mutex> lk(mutex_residue_info);
+    return loop_edges_terms.size();
+
 }

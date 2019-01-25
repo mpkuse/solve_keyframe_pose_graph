@@ -25,11 +25,12 @@
 #include <ros/package.h>
 
 #include "NodeDataManager.h"
+#include "PoseGraphSLAM.h"
 
 #include "utils/PoseManipUtils.h"
 #include "utils/RosMarkerUtils.h"
 #include "utils/TermColor.h"
-
+#include "utils/FalseColors.h"
 using namespace std;
 using namespace Eigen;
 
@@ -37,18 +38,18 @@ using namespace Eigen;
 class VizPoseGraph
 {
 public:
-    VizPoseGraph( const NodeDataManager* _manager ) : manager(_manager) {};
+    VizPoseGraph( const NodeDataManager* _manager, const PoseGraphSLAM* _slam ) : manager(_manager), slam(_slam){};
     void setVisualizationPublisher( const ros::Publisher& pub );
     void setPathPublisher( const ros::Publisher& pub ); //< TODO: removal
     void setOdometryPublisher( const ros::Publisher& pub );
 
-    void publishLastNNodes( int n );
+    // void publishLastNNodes( int n ); //< Removal
     void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b );
     void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns,
         float r, float g, float b,
         int idx_partition,
         float r1, float g1, float b1, bool enable_camera_visual=true  );
-    void publishEdgesAsLineArray( int n );
+    // void publishEdgesAsLineArray( int n ); //< removal
     void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b );
     void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 );
     void publishPath( const vector<Matrix4d>& w_T_ci, int start, int end  );
@@ -56,9 +57,11 @@ public:
     void publishOdometry( const vector<Matrix4d>& w_T_ci );
     void publishLastNEdges( int n );
 
+    void publishSlamResidueVisual( int n );
 
 private:
     const NodeDataManager * manager=NULL;
+    const PoseGraphSLAM * slam = NULL;
 
     // Publish Marker
     ros::Publisher pub_pgraph; //< Marker
