@@ -87,6 +87,25 @@ double * PoseGraphSLAM::get_raw_ptr_to_opt_variable_t( int i ) const
     return opt_t[i];
 }
 
+bool PoseGraphSLAM::update_opt_variable_with( int i, const Matrix4d& pose ) //< this will set opt_quad[i] and opt_t[i]. Will return false for invalid i
+{
+    double i_opt_quat[5], i_opt_t[5];
+    PoseManipUtils::eigenmat_to_raw_xyzw( pose, i_opt_quat, i_opt_t );
+
+
+    if( i>=0 && i<n_opt_variables() )
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        for( int k=0 ; k<4 ; k++ )
+            (opt_quat[i])[k] = i_opt_quat[k];
+        for( int k=0 ; k<3 ; k++ )
+            (opt_t[i])[k] = i_opt_t[k];
+        return true;
+    } else {
+        return false;
+    }
+}
+
 bool PoseGraphSLAM::saveAsJSON(const string base_path)
 {
     json all_info;
@@ -470,6 +489,13 @@ void PoseGraphSLAM::new_optimize6DOF()
     int prev_node_len=0, node_len;
     int prev_loopedge_len=0, loopedge_len;
     solved_until = 1;
+
+    bool marked_previous_nodes_opt_variables_as_constant = false; //< this is used so that I only mark variables as constant 1 time and avoid repeating
+
+    // Whenever kidnap happens, the vins_estimator is restarted. This results in a new co-ordinate frame (new world) for the new incoming poses (after unkidnap)
+    // This map stores the estimates of relative transforms between 2 world's. For example map[2,4] will store transform between world-2 and world-4.
+    std::map< std::pair<int,int> , Matrix4d > rel_pose_between_worlds__wb_T_wa;
+
     while( new_optimize6DOF_isEnabled )
     {
         cout << "---\n";
@@ -480,6 +506,37 @@ void PoseGraphSLAM::new_optimize6DOF()
         loopedge_len = manager->getEdgeLen();
 
 
+        #if 1
+        //---------
+        // If the current state is found to be kidnapped,
+        // a good strategy is to mark the previous nodes opt_pose as constants
+        //----------
+        // TODO: mark as constant from penultimate_kidnap_ended() --> last_kidnap_started()
+        if( manager->curr_kidnap_status() == true ) { // this code executes only the state is kidnapped
+            // loop from 0 to last_kidnap_started() and mark those optimization
+            // variables as constants
+
+            // this has to be done only one time in the kidnapped mode
+            if( !marked_previous_nodes_opt_variables_as_constant ) {
+                for( int qqq=0 ; qqq<node_len ; qqq++ ) {
+                    if( manager->getNodeTimestamp( qqq ) > manager->last_kidnap_started() ) {
+                        break;
+                    }
+                    cout << TermColor::YELLOW() <<  "Mark node#" << qqq << "'s optimization variables as constant " << TermColor::RESET() << endl;
+                    {
+                        problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(qqq) );
+                        problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(qqq)  );
+                    }
+                }
+            }
+            marked_previous_nodes_opt_variables_as_constant = true;
+
+        }
+        else { marked_previous_nodes_opt_variables_as_constant = false; }
+
+        #endif
+
+
         //-------------------
         // Are there any new nodes ?
         //      if yes than a) add new optimization variables b) add odometry edges to the optimization problem
@@ -488,7 +545,9 @@ void PoseGraphSLAM::new_optimize6DOF()
         {
             __PoseGraphSLAM_new_optimize6DOF_odom(
             cout << TermColor::CYAN() << "there are " << node_len - prev_node_len << " new nodes\t";
-            cout << " from [" << prev_node_len << ", " << node_len-1 << "]" << TermColor::RESET() << endl;
+            cout << " from [" << prev_node_len << ", " << node_len-1 << "]\t" ;
+            cout << "t=" << manager->getNodeTimestamp( prev_node_len  ) << " to " << manager->getNodeTimestamp( node_len-1  ) ;
+            cout << TermColor::RESET() << endl;
             )
 
             //###################
@@ -502,10 +561,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                     allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
                 }
                 else {
-                    // TODO think more, probably need to use solved_until and init the pose of opt variables accordingly
-                    #if 0
-                    allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
-                    #else
+
 
                     // M : uncorrected poses
                     // T : corrected poses
@@ -525,10 +581,11 @@ void PoseGraphSLAM::new_optimize6DOF()
                     Matrix4d w_T_last = this->getNodePose( (int)this->solvedUntil()-1 );
                     Matrix4d w_TM_u = w_T_last * last_M_u;
 
+
                     allocate_and_append_new_opt_variable_withpose( w_TM_u );
 
 
-                    #endif
+
 
 
                 }
@@ -558,6 +615,29 @@ void PoseGraphSLAM::new_optimize6DOF()
                     if( u-f < 0 )
                         continue;
 
+                    #if 1
+                    // not letting odometry edges between two co-ordinate systems
+                    ///////////////// u and u-f various scenarios
+                    // (1) ----|        |---um--u  //< OK
+                    // (2) ----| um     |--u---    //< don't add odomedge
+                    // (3) ----| um  u  |----      //< don't add odomedge
+                    // (4) --um--|  u   |----      //< don't add odomedge
+
+                    if( manager->curr_kidnap_status() == false &&
+                        manager->getNodeTimestamp( u-f ) >manager->last_kidnap_ended()
+                    )
+                    {
+                        //OK!, ie. add odometry edge
+                    }
+                    else {
+                        // don't add this odometry edge
+                        cout << TermColor::iBLUE() << "not adding " << u-f << "<-->" << u << TermColor::RESET() << endl;
+                        continue;
+                    }
+                    // cout << "Add : " << u-f << "<-->" << u << endl;
+
+                    //////////////////
+                    #endif
 
                     // Pose of odometry edge
                     Matrix4d w_M_u = manager->getNodePose(u);
@@ -607,14 +687,63 @@ void PoseGraphSLAM::new_optimize6DOF()
             //##############################
             cout <<  TermColor::MAGENTA() << "Add loopedges from [" << prev_loopedge_len << ", " << loopedge_len-1  << "]"<< TermColor::RESET() << endl;
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
-                MatrixXd bTa = manager->getEdgePose(e);
+                MatrixXd bTa = manager->getEdgePose(e); //< This is the edge's observed pose, as received in the edge-message
                 double weight = manager->getEdgeWeight(e);
                 auto paur = manager->getEdgeIdxInfo(e);
 
-                cout << "\t##loopedge e=" << e << "\t";
+                // Print the info of the edge as it is.
+                cout << "\t---\n\t##loopedge e=" << e << "\t";
                 cout << "(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(4) << weight;
                 cout << "\n\tdescription_string=" << manager->getEdgeDescriptionString(e) << "\n";
-                cout << "\tbTa="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
+                cout << "\tbTa(observed)="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
+                cout << "\ta's world is: "<< manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) )
+                     << "\t"
+                     << "b's world is: " << manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) ) << endl;
+
+
+
+                #if 1
+                // Move the initial guess of optimization variables if both seem to be from different worlds
+                {
+                    int _a = paur.first;
+                    int _b = paur.second;
+                    int world_of_a = manager->which_world_is_this( manager->getNodeTimestamp( _a ) );
+                    int world_of_b = manager->which_world_is_this( manager->getNodeTimestamp( _b ) );
+
+                    if( world_of_a != world_of_b && world_of_a >=0 && world_of_b >=0 )
+                    {
+                        // the two edge-end-pts are in different worlds.
+                        cout << TermColor::BLUE() ;
+                        cout << "The two edge-end-pts are in different worlds.\n";
+
+                        if( rel_pose_between_worlds__wb_T_wa.count( std::make_pair(world_of_b,world_of_a) ) > 0  )
+                        {
+                            auto rel_wb_T_wa = rel_pose_between_worlds__wb_T_wa[ std::make_pair(world_of_b, world_of_a ) ];
+                            cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
+                            cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
+                        }
+                        else {
+                            cout << "I DONOT know the relative transforms between the 2 world, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
+
+                            // compute the relative transforms between the 2 worlds
+                            Matrix4d wa_T_a = this->getNodePose( _a );
+                            Matrix4d wb_T_b = this->getNodePose( _b );
+                            Matrix4d b_T_a_observed = manager->getEdgePose(e);
+
+                            Matrix4d wb_T_a = wb_T_b * b_T_a_observed;
+                            Matrix4d wb_T_wa = wb_T_a * wa_T_a.inverse();
+                            cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << endl;
+
+                            // set the computed pose into the global (to this thread) data-structure
+                            cout << "rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
+                            rel_pose_between_worlds__wb_T_wa[ make_pair( world_of_b, world_of_a ) ] = wb_T_wa;
+                        }
+
+                        cout << TermColor::RESET() << endl;
+                    }
+                }
+                #endif
+
 
 
                 // ordinary loop edge residue term
@@ -649,14 +778,18 @@ void PoseGraphSLAM::new_optimize6DOF()
                 auto paur = manager->getEdgeIdxInfo(e);
                 int _a = paur.first;
                 int _b = paur.second;
-                cout << _a << "<-->" << _b << "\t";
+                cout << ":::::::::" <<  _a << "<-->" << _b << "\t";
+                cout << "edge_switch_variable=" << std::setprecision(4) << get_raw_ptr_to_opt_switch(e)[0] << std::fixed << "\n";
+
+                cout << "wTa(opt_vars) : " <<  PoseManipUtils::prettyprintMatrix4d( this->getNodePose(_a) ) << endl;
+                cout << "wTb(opt_vars) : " <<  PoseManipUtils::prettyprintMatrix4d( this->getNodePose(_b) ) << endl;
+
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
-                cout << "edge_switch_variable=" << get_raw_ptr_to_opt_switch(e)[0] << "\t";
                 cout << "bTa(opt_vars)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
 
 
                 auto getEdgePose_after_opt_manager = manager->getNodePose(_b).inverse() * manager->getNodePose(_a);
-                cout << std::setprecision(20) << "(manager)a_timestamp=" << manager->getNodeTimestamp( _a ).toSec() << "\t" << "b_timestamp=" << manager->getNodeTimestamp(_b).toSec() << endl;
+                cout << std::setprecision(20) << "(manager)a_timestamp=" << manager->getNodeTimestamp( _a ).toSec() << "\t" << "b_timestamp=" << manager->getNodeTimestamp(_b).toSec() << std::fixed <<  endl;
                 cout << "bTa(manager,odom)" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt_manager ) << endl;
             }
             cout << TermColor::RESET() ;
@@ -670,8 +803,11 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << TermColor::iGREEN() ;
             cout << "solve()\n";
             ElapsedTime timer; timer.tic();
+            {
+                std::lock_guard<std::mutex> lk(mutex_opt_vars);
             ceres::Solve( options, &problem, &summary );
             solved_until = node_len;
+            }
             // cout << summary.FullReport() << endl;
             cout << "Solve() took (milli-sec) : " << timer.toc_milli()  << endl;
             cout << summary.BriefReport() << endl;
@@ -682,17 +818,21 @@ void PoseGraphSLAM::new_optimize6DOF()
 
             #if 1
             // print loopedges after optimization
-            cout << TermColor::YELLOW() << "## Loopedges after Solve()\n";
+            cout << TermColor::GREEN() << "## Loopedges after Solve()\n";
             for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
                 auto paur = manager->getEdgeIdxInfo(e);
                 int _a = paur.first;
                 int _b = paur.second;
-                cout << _a << "<-->" << _b << "\t";
-                cout << "edge_switch_variable=" << get_raw_ptr_to_opt_switch(e)[0] << "\t";
+                cout << ":::::::::" << _a << "<-->" << _b << "\t";
+                cout << "edge_switch_variable=" << std::setprecision(4) << get_raw_ptr_to_opt_switch(e)[0] << std::fixed << "\n";
+
+                cout << "wTa(opt_vars) : " <<  PoseManipUtils::prettyprintMatrix4d( this->getNodePose(_a) ) << endl;
+                cout << "wTb(opt_vars) : " <<  PoseManipUtils::prettyprintMatrix4d( this->getNodePose(_b) ) << endl;
+
                 auto getEdgePose_after_opt = this->getNodePose(_b).inverse() * this->getNodePose(_a);
                 cout << "bTa" << PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt ) << endl;
-                cout << TermColor::RESET() ;
             }
+            cout << TermColor::RESET() ;
             #endif
 
         }

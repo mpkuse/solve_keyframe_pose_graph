@@ -377,8 +377,8 @@ void VizPoseGraph::publishSlamResidueVisual( int n )
         int a = std::get<0>(m);
         int b = std::get<1>(m);
         float w = std::get<2>(m);
-        if( abs(a-b) != 1 )
-            continue;
+        // if( abs(a-b) != 1 )
+            // continue;
 
 
         Vector3d w_t_a = manager->getNodePose( a ).col(3).topRows(3);

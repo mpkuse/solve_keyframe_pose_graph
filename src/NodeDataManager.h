@@ -43,7 +43,7 @@
 #include <nav_msgs/Odometry.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/ColorRGBA.h>
-
+#include <std_msgs/Bool.h>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -131,5 +131,31 @@ private:
     int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp );
 
     // void _print_info_on_npyarray( const cnpy::NpyArray& arr );
+
+    ////// Kidnap related
+public:
+    void rcvd_kidnap_indicator_callback( const std_msgs::HeaderConstPtr& rcvd_ );
+    const ros::Time last_kidnap_ended();
+    const ros::Time NodeDataManager::last_kidnap_started();
+    bool curr_kidnap_status() { return current_kidnap_status; }
+
+    // Give me a timestamp and I will tell you which world co-ordinate system
+    // this time is.
+    //-----------|       |------------------|         |--------------
+    //  ^^w0        ^-1       ^^w1               ^^-2           ^^w2
+    int which_world_is_this( const ros::Time _t );
+
+private:
+    mutable std::mutex mutex_kidnap;
+    vector<ros::Time> kidnap_starts;
+    vector<ros::Time> kidnap_ends;
+    atomic<bool> current_kidnap_status; ///< false indicates `bussiness as usual`. true means kidnapped
+
+
+    void mark_as_kidnapped( const ros::Time _t );
+    void mark_as_unkidnapped( const ros::Time _t );
+
+
+
 
 };

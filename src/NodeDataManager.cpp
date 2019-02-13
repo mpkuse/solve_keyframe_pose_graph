@@ -12,6 +12,8 @@ node_pose_covariance.reserve(10000);
 loopclosure_edges.reserve(10000);
 loopclosure_edges_goodness.reserve(10000);
 loopclosure_p_T_c.reserve(10000);
+
+current_kidnap_status = false;
 }
 
 
@@ -863,4 +865,115 @@ bool NodeDataManager::loadFromJSON( const string& base_path, const vector<bool>&
     cout << TermColor::GREEN() << "Loaded LoopEdges: this->getEdgeLen()=" << this->getEdgeLen() << TermColor::RESET() << endl;
 
 
+}
+
+
+///// kidnap related
+
+// The header contains a timestamp. indicator string is frame_id.
+// frame_id == "kidnapped" ==> the timestamp is the time of kidnap
+// frame_id == "unkidnapped" ==> the timestamp is the time of unkidnapped.
+//  anything else in frame_id is an error
+void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderConstPtr& rcvd_header )
+{
+    cout << TermColor::RED() << "[posegraph solver rcvd_kidnap_indicator_callback]" ;
+    cout << rcvd_header->stamp << ":" << rcvd_header->frame_id ;
+    cout << TermColor::RESET() << endl;
+
+    if( rcvd_header->frame_id  == "kidnapped" ) {
+        // the time stamp is the start of kidnap
+        mark_as_kidnapped( rcvd_header->stamp );
+        return;
+
+
+    }
+
+    if( rcvd_header->frame_id  == "unkidnapped" ) {
+        // the timestamp is end of kidnap
+        mark_as_unkidnapped( rcvd_header->stamp );
+        return;
+    }
+
+    ROS_ERROR( "[posegraph solver NodeDataManager::rcvd_kidnap_indicator_callback] rcvd_header is something other than `kidnapped` or `unkidnapped`. This should not be happening and is a fatal error.");
+}
+
+
+void NodeDataManager::mark_as_kidnapped( const ros::Time _t )
+{
+    assert( current_kidnap_status == false && "[NodeDataManager::mark_as_kidnapped] you can mark as kidnapped only when i was not kidnapped.\n");
+    current_kidnap_status = true;
+    {
+        std::lock_guard<std::mutex> lk(mutex_kidnap);
+        kidnap_starts.push_back( _t );
+    }
+}
+
+void NodeDataManager::mark_as_unkidnapped( const ros::Time _t )
+{
+    assert( current_kidnap_status == true && "[NodeDataManager::mark_as_unkidnapped] you can mark as unkidnapped only when i was kidnapped.\n");
+    current_kidnap_status = false;
+    {
+        std::lock_guard<std::mutex> lk(mutex_kidnap);
+        kidnap_ends.push_back( _t );
+    }
+}
+
+const ros::Time NodeDataManager::last_kidnap_ended()
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    if( kidnap_ends.size() > 0 ) {
+        return kidnap_ends[ kidnap_ends.size()-1 ];
+    }
+    else {
+        return ros::Time();
+    }
+}
+
+const ros::Time NodeDataManager::last_kidnap_started()
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    if( kidnap_starts.size() > 0 ) {
+        return kidnap_starts[ kidnap_starts.size()-1 ];
+    }
+    else {
+        return ros::Time();
+    }
+}
+
+
+int NodeDataManager::which_world_is_this( const ros::Time _t )
+{
+    // TODO: lock
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+
+
+    if( kidnap_starts.size() == 0 ) // there are no kidnaps, so always return '0'
+        return 0;
+
+    if( kidnap_starts.size() == 1 ) {
+        if( _t < kidnap_starts[0] )
+            return 0;
+
+        if( kidnap_ends.size() == 0 ) {
+            if( _t >= kidnap_starts[0] )
+                return -1;
+            else
+                return 0;
+        } else {
+            if( _t >= kidnap_starts[0] && _t <= kidnap_ends[0] )
+                return -1;
+            else
+                return 1;
+        }
+    }
+
+    ROS_ERROR( "NOT implemented [int which_world_is_this( const ros::Time _t )]");
+
+    // TODO implement this
+    //
+    // // go thru each kidnap and see where this fits
+    // for( int i=1 ; i<kidnap_starts.size() ; i++ )
+    // {
+    //     if( _t < kidnap_starts[i] && )
+    // }
 }

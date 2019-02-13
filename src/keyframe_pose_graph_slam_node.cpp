@@ -199,6 +199,12 @@ int main( int argc, char ** argv)
 
 
     //-- TODO: Also subscribe to tracked features to know if I have been kidnaped.
+    //  False indicates -> I got kidnapped now
+    //  True indicates --> I got unkidnapped.
+    string rcvd_kidnap_indicator_topic = string( "/feature_tracker/rcvd_flag_header" );
+    ROS_INFO( "Subscribed to kidnap_indicator aka %s", rcvd_kidnap_indicator_topic.c_str() );
+    ros::Subscriber sub_kidnap_indicator = nh.subscribe( rcvd_kidnap_indicator_topic, 100, &NodeDataManager::rcvd_kidnap_indicator_callback, manager );
+
 
 
     // Setup publishers

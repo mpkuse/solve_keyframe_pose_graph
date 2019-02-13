@@ -105,6 +105,8 @@ private:
     double * get_raw_ptr_to_opt_variable_q( int i ) const;
     double * get_raw_ptr_to_opt_variable_t( int i ) const;
 
+    bool update_opt_variable_with( int i, const Matrix4d& pose ); //< this will set opt_quad[i] and opt_t[i]. Will return false for invalid i
+
 
     // Optimization variables - Loop Edge Switching Constrainsts
     vector<double*> opt_switch;
