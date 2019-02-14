@@ -38,6 +38,7 @@
 #include <ros/package.h>
 
 #include "NodeDataManager.h"
+#include "Worlds.h"
 #include "ScreenColors.h"
 
 #include "utils/PoseManipUtils.h"

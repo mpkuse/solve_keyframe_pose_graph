@@ -133,11 +133,23 @@ private:
     // void _print_info_on_npyarray( const cnpy::NpyArray& arr );
 
     ////// Kidnap related
+    // TODO: Would be better if I move the World world object here, instead of current in slam class. 
 public:
     void rcvd_kidnap_indicator_callback( const std_msgs::HeaderConstPtr& rcvd_ );
+
     const ros::Time last_kidnap_ended();
-    const ros::Time NodeDataManager::last_kidnap_started();
+    const ros::Time last_kidnap_started();
     bool curr_kidnap_status() { return current_kidnap_status; }
+
+
+    ros::Time stamp_of_kidnap_i_started( int i );
+    ros::Time stamp_of_kidnap_i_ended( int i );
+    int n_kidnaps();
+
+
+    int nodeidx_of_world_i_started( int i );
+    int nodeidx_of_world_i_ended( int i );
+    int n_worlds();
 
     // Give me a timestamp and I will tell you which world co-ordinate system
     // this time is.

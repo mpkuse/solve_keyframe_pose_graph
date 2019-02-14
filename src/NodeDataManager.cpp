@@ -941,6 +941,37 @@ const ros::Time NodeDataManager::last_kidnap_started()
 }
 
 
+int NodeDataManager::n_kidnaps()
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    return kidnap_ends.size();
+}
+
+// #define __KIDNAP_START_ENDS___debug( msg ) msg;
+#define __KIDNAP_START_ENDS___debug( msg ) ;
+ros::Time NodeDataManager::stamp_of_kidnap_i_started( int i )
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+
+    if( i>=0 && i<kidnap_starts.size() ) {
+        return kidnap_starts[i];
+    }
+
+    __KIDNAP_START_ENDS___debug( cout << "[NodeDataManager::stamp_of_kidnap_i_started]no such kidnap" << i << " kidnap_starts.size()=" << kidnap_starts.size() << endl; )
+    return ros::Time();
+}
+
+ros::Time NodeDataManager::stamp_of_kidnap_i_ended( int i )
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    if( i>=0 && i<kidnap_ends.size() ) {
+        return kidnap_ends[i];
+    }
+
+    __KIDNAP_START_ENDS___debug( cout << "[NodeDataManager::stamp_of_kidnap_i_ended]no such kidnap" << i << " kidnap_ends.size()=" << kidnap_ends.size() << endl; )
+    return ros::Time();
+}
+
 int NodeDataManager::which_world_is_this( const ros::Time _t )
 {
     // TODO: lock
@@ -967,13 +998,137 @@ int NodeDataManager::which_world_is_this( const ros::Time _t )
         }
     }
 
-    ROS_ERROR( "NOT implemented [int which_world_is_this( const ros::Time _t )]");
+    // ROS_ERROR( "NOT implemented [int which_world_is_this( const ros::Time _t )]. EXITE10");
+    // exit(10);
 
-    // TODO implement this
-    //
-    // // go thru each kidnap and see where this fits
-    // for( int i=1 ; i<kidnap_starts.size() ; i++ )
-    // {
-    //     if( _t < kidnap_starts[i] && )
-    // }
+
+
+    if( kidnap_starts.size() == kidnap_ends.size() )
+    {
+        ros::Time prev = ros::Time(); // TODO deally should, set this to pose0timestamp
+        for( int i=0 ; i<kidnap_starts.size() ; i++ )
+        {
+            if( _t > prev && _t <= kidnap_starts[i] )
+                return i;
+
+            if( _t> kidnap_starts[i] && _t <= kidnap_ends[i] )
+                return -(i+1);
+
+            prev = kidnap_ends[i];
+        }
+        return kidnap_ends.size();
+    } else {
+
+        // this means the current state is kidnapped.
+        ros::Time prev = ros::Time(); // TODO deally should, set this to pose0timestamp
+        for( int i=0 ; i<kidnap_starts.size()-1 ; i++ )
+        {
+            if( _t > prev && _t <= kidnap_starts[i] )
+                return i;
+
+            if( _t> kidnap_starts[i] && _t <= kidnap_ends[i] )
+                return -(i+1);
+
+            prev = kidnap_ends[i];
+        }
+
+        int i = kidnap_starts.size() - 1;
+        if( _t > kidnap_ends[i-1] && _t <= kidnap_starts[i] )
+            return i;
+
+        if( _t > kidnap_starts[i] )
+            return -(i+1);
+
+
+
+
+    }
+
+}
+
+
+// #define __WORLD_START_ENDS___debug( msg ) msg;
+#define __WORLD_START_ENDS___debug( msg ) ;
+int NodeDataManager::nodeidx_of_world_i_started( int i )
+{
+
+    if( i<0 )
+    {
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] i cant be negative. no such world " << i << " exists\n"; )
+        return -3;
+    }
+    if( i==0 ) {
+        __WORLD_START_ENDS___debug(
+        cout << "[NodeDataManager::nodeidx_of_world_i_started] special case of world0\n";
+        )
+        return 0;
+    }
+
+
+    int n=0;
+    {
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    n=kidnap_ends.size() ;
+    }
+
+    if( i>=1 && (i-1) <n ) {
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] return nodeidx of kidnap_ends["<<i-1 <<"] as the start of world" << i << "\n"; )
+        std::lock_guard<std::mutex> lk(node_mutex);
+
+        int r=0;
+        for( auto it=node_timestamps.begin() ; it!=node_timestamps.end() ; it++, r++  ) {
+            if( which_world_is_this( *it ) == i )
+                return r;
+        }
+
+        // return -1;
+        // return find_indexof_node( node_timestamps, kidnap_ends[i-1]  );
+    }
+
+
+    __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] no such world " << i << " exists\n"; )
+    return -4;
+}
+
+int NodeDataManager::nodeidx_of_world_i_ended( int i )
+{
+    // returns a large number if the world i never ended
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    int n_kidnap_ends = kidnap_ends.size();
+
+    if( i<0 ) {
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] i cannot be negative. no such world\n");
+        return -1;
+    }
+
+    if( i>n_kidnap_ends ) {
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] no such world" << i << "\n"; )
+        return -1;
+    }
+    else {
+        // ith world exist
+        std::lock_guard<std::mutex> lk(node_mutex);
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] world" << i << " exists\n"; )
+        if( i>=0 && i<kidnap_starts.size() ) {
+            __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] return kidnap_start[" << i << "]\n"; )
+            return find_indexof_node( node_timestamps, kidnap_starts[i]  );
+        }
+        else {
+            __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] world"<< i << " never ends\n"; )
+            return node_timestamps.size()-1;
+        }
+    }
+
+
+
+}
+
+
+
+
+
+int NodeDataManager::n_worlds()
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    return kidnap_ends.size() + 1;
 }

@@ -71,6 +71,14 @@ public:
     }
 
 
+  static cv::Scalar randomColor( int rng )
+  {
+      int icolor = (unsigned) rng;
+      //TODO: to get even better colors use rng to generave a hue. With max saturation and brightness convert it to RGB
+      return cv::Scalar( icolor&255, (icolor>>8)&255, (icolor>>16)&255 );
+  }
+
+
 private:
     cv::Mat colormap_color;
 

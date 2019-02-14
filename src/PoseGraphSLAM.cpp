@@ -494,7 +494,7 @@ void PoseGraphSLAM::new_optimize6DOF()
 
     // Whenever kidnap happens, the vins_estimator is restarted. This results in a new co-ordinate frame (new world) for the new incoming poses (after unkidnap)
     // This map stores the estimates of relative transforms between 2 world's. For example map[2,4] will store transform between world-2 and world-4.
-    std::map< std::pair<int,int> , Matrix4d > rel_pose_between_worlds__wb_T_wa;
+    Worlds worlds_handle; //TODO consider moving this to NodeDataManager class.
 
     while( new_optimize6DOF_isEnabled )
     {
@@ -506,7 +506,7 @@ void PoseGraphSLAM::new_optimize6DOF()
         loopedge_len = manager->getEdgeLen();
 
 
-        #if 1
+        #if 0
         //---------
         // If the current state is found to be kidnapped,
         // a good strategy is to mark the previous nodes opt_pose as constants
@@ -547,6 +547,7 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << TermColor::CYAN() << "there are " << node_len - prev_node_len << " new nodes\t";
             cout << " from [" << prev_node_len << ", " << node_len-1 << "]\t" ;
             cout << "t=" << manager->getNodeTimestamp( prev_node_len  ) << " to " << manager->getNodeTimestamp( node_len-1  ) ;
+            cout << "  which_world_is_this=" << manager->which_world_is_this( manager->getNodeTimestamp( prev_node_len  ) ) << " to " << manager->which_world_is_this( manager->getNodeTimestamp( node_len-1  ) ) ;
             cout << TermColor::RESET() << endl;
             )
 
@@ -557,6 +558,8 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << TermColor::CYAN() << "Add new optimization variables for each node and initialize them correctly. push_back optimization variables for each of these" << TermColor::RESET() << endl;
             )
             for( int u=prev_node_len ; u<node_len ; u++ ) {
+                int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
+
                 if( u==0 ) { //0th node.
                     allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
                 }
@@ -580,11 +583,30 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                     Matrix4d w_T_last = this->getNodePose( (int)this->solvedUntil()-1 );
                     Matrix4d w_TM_u = w_T_last * last_M_u;
-
+                    //       ^^^^ this is in its own world frame.
 
                     allocate_and_append_new_opt_variable_withpose( w_TM_u );
 
+                    #if 1
+                    // This is the new code added for handling kidnaps
+                    if( world_of_u == 0 ) {
+                        ;
+                    }
+                    else {
+                        cout << "world_of_u" << u << " = " << world_of_u;
+                        cout << ( (worlds_handle.is_exist(0, world_of_u) ) ? "Y":"N" ) << ", ";
 
+                        if( worlds_handle.is_exist(0, world_of_u) ) {
+                            cout << "\nI Can initialize the pose in world0\n";
+                            auto _tmo = worlds_handle.getPoseBetweenWorlds(0,world_of_u) * w_TM_u;
+                            // this->update_opt_variable_with( u, _tmo );
+
+                        }
+                        else {
+                            cout << "\nthis u is not in world0, I do not know its world's pose wrt to world0 yet.\n";
+                        }
+                    }
+                    #endif
 
 
 
@@ -599,6 +621,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                     problem.SetParameterBlockConstant(  opt_t[0]  );
                 }
             }
+            cout << "\n";
             __PoseGraphSLAM_new_optimize6DOF_odom_debug( cout << "\\n" << endl );
 
 
@@ -703,10 +726,11 @@ void PoseGraphSLAM::new_optimize6DOF()
 
 
                 #if 1
+                // code added to take care of kidnaps
                 // Move the initial guess of optimization variables if both seem to be from different worlds
                 {
-                    int _a = paur.first;
-                    int _b = paur.second;
+                    int _a = paur.first; // current, eg. 386
+                    int _b = paur.second; //previous  eg. 165
                     int world_of_a = manager->which_world_is_this( manager->getNodeTimestamp( _a ) );
                     int world_of_b = manager->which_world_is_this( manager->getNodeTimestamp( _b ) );
 
@@ -716,9 +740,9 @@ void PoseGraphSLAM::new_optimize6DOF()
                         cout << TermColor::BLUE() ;
                         cout << "The two edge-end-pts are in different worlds.\n";
 
-                        if( rel_pose_between_worlds__wb_T_wa.count( std::make_pair(world_of_b,world_of_a) ) > 0  )
+                        if( worlds_handle.is_exist(world_of_b,world_of_a) )
                         {
-                            auto rel_wb_T_wa = rel_pose_between_worlds__wb_T_wa[ std::make_pair(world_of_b, world_of_a ) ];
+                            auto rel_wb_T_wa = worlds_handle.getPoseBetweenWorlds( world_of_b, world_of_a );
                             cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
                             cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
                         }
@@ -736,7 +760,14 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                             // set the computed pose into the global (to this thread) data-structure
                             cout << "rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
-                            rel_pose_between_worlds__wb_T_wa[ make_pair( world_of_b, world_of_a ) ] = wb_T_wa;
+                            worlds_handle.setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa );
+
+
+                            // set all earlier node poses of [world-a-start, _a]
+                            cout << TermColor::RESET() << TermColor::BLUE();
+                            cout << "Set all earlier node poses of [world-a-start, world_of_a]\n";
+                            cout << "world_of_a=" << world_of_a << "\tworld_of_a starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_a) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_a) << endl;
+
                         }
 
                         cout << TermColor::RESET() << endl;
@@ -845,6 +876,60 @@ void PoseGraphSLAM::new_optimize6DOF()
     }
 
     cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::new_optimize6DOF`" << TermColor::RESET() << endl;
+
+
+    //// Info on worlds
+    cout << TermColor::YELLOW() ;
+    cout << "Info on worlds start and end times from NodeDataManager\n";
+    cout << "#worlds = " << manager->n_worlds() << endl;
+    for( int i=0 ; i<manager->n_worlds() ; i++ ) {
+        cout << "world#" << i;
+        cout << "  start_u=" << manager->nodeidx_of_world_i_started(i) << "\tend_u=" << manager->nodeidx_of_world_i_ended(i);
+        cout << "  start_u_stamp=" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_started(i) ) << "\tend_u_stamp=" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_ended(i) );
+        cout << endl;
+    }
+    cout << TermColor::RESET() << endl;
+
+    //// Relative transforms between worlds
+    worlds_handle.print_summary();
+
+
+    //// When was I kidnaped
+    cout << TermColor::BLUE();
+    cout << "Info on Kidnap starts and ends\n";
+    cout << "There were a total of " << manager->n_kidnaps() << " kidnaps\n";
+    for( int i=0 ; i<manager->n_kidnaps() ; i++ )
+    {
+        cout << "kidnap#" << i ;
+        cout << "\tstart=" << manager->stamp_of_kidnap_i_started(i);
+        cout << "\tends =" << manager->stamp_of_kidnap_i_ended(i);
+        cout << endl;
+    }
+
+    cout << " manager->last_kidnap_started() : "  << manager->last_kidnap_started() << endl;
+    cout << " manager->last_kidnap_ended()   : " <<  manager->last_kidnap_ended() << endl;
+    cout << TermColor::RESET();
+
+
+
+
+    //// Which world each of the nodes belong to
+    cout << "Info on all the Nodes\n";
+    int r=0;
+    for( int r=0 ; r<manager->getNodeLen() ; r++ )
+    {
+        ros::Time _t = manager->getNodeTimestamp(r);
+        cout << "node#" <<  std::setw(5) << r << " t=" << _t  << " world=" <<  std::setw(3) << manager->which_world_is_this( _t ) ;
+
+        if( r%3 == 0  )
+            cout << endl;
+        else
+            cout << "\t\t";
+    }
+    cout << endl;
+
+
+
 }
 
 
