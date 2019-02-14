@@ -494,7 +494,7 @@ void PoseGraphSLAM::new_optimize6DOF()
 
     // Whenever kidnap happens, the vins_estimator is restarted. This results in a new co-ordinate frame (new world) for the new incoming poses (after unkidnap)
     // This map stores the estimates of relative transforms between 2 world's. For example map[2,4] will store transform between world-2 and world-4.
-    Worlds worlds_handle; //TODO consider moving this to NodeDataManager class.
+    // Worlds worlds_handle; //TODO consider moving this to NodeDataManager class.
 
     while( new_optimize6DOF_isEnabled )
     {
@@ -594,11 +594,11 @@ void PoseGraphSLAM::new_optimize6DOF()
                     }
                     else {
                         cout << "world_of_u" << u << " = " << world_of_u;
-                        cout << ( (worlds_handle.is_exist(0, world_of_u) ) ? "Y":"N" ) << ", ";
+                        cout << ( (manager->worlds_handle.is_exist(0, world_of_u) ) ? "Y":"N" ) << ", ";
 
-                        if( worlds_handle.is_exist(0, world_of_u) ) {
+                        if( manager->worlds_handle.is_exist(0, world_of_u) ) {
                             cout << "\nI Can initialize the pose in world0\n";
-                            auto _tmo = worlds_handle.getPoseBetweenWorlds(0,world_of_u) * w_TM_u;
+                            auto _tmo = manager->worlds_handle.getPoseBetweenWorlds(0,world_of_u) * w_TM_u;
                             // this->update_opt_variable_with( u, _tmo );
 
                         }
@@ -740,9 +740,9 @@ void PoseGraphSLAM::new_optimize6DOF()
                         cout << TermColor::BLUE() ;
                         cout << "The two edge-end-pts are in different worlds.\n";
 
-                        if( worlds_handle.is_exist(world_of_b,world_of_a) )
+                        if( manager->worlds_handle.is_exist(world_of_b,world_of_a) )
                         {
-                            auto rel_wb_T_wa = worlds_handle.getPoseBetweenWorlds( world_of_b, world_of_a );
+                            auto rel_wb_T_wa = manager->worlds_handle.getPoseBetweenWorlds( world_of_b, world_of_a );
                             cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
                             cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
                         }
@@ -760,7 +760,9 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                             // set the computed pose into the global (to this thread) data-structure
                             cout << "rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
-                            worlds_handle.setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa );
+
+                            string info_string = "this pose computed from edge "+ std::to_string(_a) + " <--> " + std::to_string(_b);
+                            manager->worlds_handle.setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa,  info_string );
 
 
                             // set all earlier node poses of [world-a-start, _a]
@@ -891,7 +893,7 @@ void PoseGraphSLAM::new_optimize6DOF()
     cout << TermColor::RESET() << endl;
 
     //// Relative transforms between worlds
-    worlds_handle.print_summary();
+    manager->worlds_handle.print_summary();
 
 
     //// When was I kidnaped

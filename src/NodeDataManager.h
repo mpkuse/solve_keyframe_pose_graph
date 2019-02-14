@@ -57,6 +57,8 @@ using namespace Eigen;
 #include "utils/RosMarkerUtils.h"
 #include "utils/TermColor.h"
 
+#include "Worlds.h"
+
 // #include "cnpy/cnpy.h"
 
 #include "nlohmann/json.hpp"
@@ -133,7 +135,7 @@ private:
     // void _print_info_on_npyarray( const cnpy::NpyArray& arr );
 
     ////// Kidnap related
-    // TODO: Would be better if I move the World world object here, instead of current in slam class. 
+    // TODO: Would be better if I move the World world object here, instead of current in slam class.
 public:
     void rcvd_kidnap_indicator_callback( const std_msgs::HeaderConstPtr& rcvd_ );
 
@@ -157,6 +159,9 @@ public:
     //  ^^w0        ^-1       ^^w1               ^^-2           ^^w2
     int which_world_is_this( const ros::Time _t );
 
+
+    Worlds worlds_handle; //< To keep track of co-ordinates transform matrix between the worlds
+
 private:
     mutable std::mutex mutex_kidnap;
     vector<ros::Time> kidnap_starts;
@@ -166,6 +171,7 @@ private:
 
     void mark_as_kidnapped( const ros::Time _t );
     void mark_as_unkidnapped( const ros::Time _t );
+
 
 
 

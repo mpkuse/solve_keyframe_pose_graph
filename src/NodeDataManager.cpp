@@ -60,7 +60,14 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
         node_timestamps.push_back( msg->header.stamp );
         node_pose.push_back( w_T_cam );
         node_pose_covariance.push_back( Cov );
+
+        // signal world0 start
+        if( node_pose.size() == 1 ) {
+            worlds_handle.world_starts( msg->header.stamp );
+        }
+
     }
+
 }
 
 
@@ -883,6 +890,9 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
     if( rcvd_header->frame_id  == "kidnapped" ) {
         // the time stamp is the start of kidnap
         mark_as_kidnapped( rcvd_header->stamp );
+
+        // signal the world ended
+        worlds_handle.world_ends( rcvd_header->stamp );
         return;
 
 
@@ -891,6 +901,9 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
     if( rcvd_header->frame_id  == "unkidnapped" ) {
         // the timestamp is end of kidnap
         mark_as_unkidnapped( rcvd_header->stamp );
+
+        // signal start of a new world
+        worlds_handle.world_starts( rcvd_header->stamp );
         return;
     }
 
