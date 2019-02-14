@@ -885,9 +885,12 @@ void PoseGraphSLAM::new_optimize6DOF()
     cout << "Info on worlds start and end times from NodeDataManager\n";
     cout << "#worlds = " << manager->n_worlds() << endl;
     for( int i=0 ; i<manager->n_worlds() ; i++ ) {
-        cout << "world#" << i;
-        cout << "  start_u=" << manager->nodeidx_of_world_i_started(i) << "\tend_u=" << manager->nodeidx_of_world_i_ended(i);
-        cout << "  start_u_stamp=" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_started(i) ) << "\tend_u_stamp=" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_ended(i) );
+        cout << "world#" << std::setw(2) << i;
+        cout << "  start_u=" <<  std::setw(5) << manager->nodeidx_of_world_i_started(i);
+        cout << "  end_u  =" <<  std::setw(5) << manager->nodeidx_of_world_i_ended(i);
+        cout << "  start_u_stamp=" <<  manager->getNodeTimestamp( manager->nodeidx_of_world_i_started(i) );
+        cout << "  end_u_stamp  =" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_ended(i) );
+        cout << "  duration=" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_ended(i) ) - manager->getNodeTimestamp( manager->nodeidx_of_world_i_started(i) );
         cout << endl;
     }
     cout << TermColor::RESET() << endl;
@@ -902,9 +905,10 @@ void PoseGraphSLAM::new_optimize6DOF()
     cout << "There were a total of " << manager->n_kidnaps() << " kidnaps\n";
     for( int i=0 ; i<manager->n_kidnaps() ; i++ )
     {
-        cout << "kidnap#" << i ;
+        cout << "kidnap#" << std::setw(2)  << i ;
         cout << "\tstart=" << manager->stamp_of_kidnap_i_started(i);
         cout << "\tends =" << manager->stamp_of_kidnap_i_ended(i);
+        cout << "\tduration=" << manager->stamp_of_kidnap_i_ended(i) - manager->stamp_of_kidnap_i_started(i) ;
         cout << endl;
     }
 
