@@ -110,9 +110,10 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
             int L = slam->nNodes();
             for( int i=0 ; i<L ; i++ )
             {
-                Matrix4d M;
+                Matrix4d M = slam->getNodePose( i );
                 // slam->opt_pose( i, M );
-                slam->getNodePose( i, M );
+                // slam->getNodePose( i, M );
+
                 optimized_w_T_ci.push_back( M );
             }
         }
@@ -172,7 +173,94 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
 }
 
 
+void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
+{
+    ros::Rate loop_rate(1);
+    while( ros::ok() )
+    {
+        string info_msg = manager->worlds_handle.disjoint_set_status();
+        cv::Mat im_disp = cv::Mat::zeros(cv::Size(300,50), CV_8UC3);
+        FalseColors::append_status_image( im_disp, info_msg );
 
+        cv::imshow( "win" , im_disp );
+        cv::waitKey(30);
+
+        loop_rate.sleep();
+    }
+}
+
+
+// plots the corrected trajectories, different worlds will have different colored lines
+void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
+{
+    return;
+    ros::Rate loop_rate(20);
+    map<int, vector<Matrix4d> > jmb;
+    while( ros::ok() )
+    {
+        cout << "[opt_traj_publisher_colored_by_world]---\n";
+        if( manager->getNodeLen() == 0 ) {
+            cout << "[opt_traj_publisher_colored_by_world]nothing to publish\n";
+            loop_rate.sleep();
+            continue;
+        }
+
+        //clear map
+        jmb.clear();
+
+        cout << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
+        #if 0
+        for( int i=0 ; i<manager->getNodeLen() ; i++ )
+        {
+            cout << "slam->solvedUntil=" << slam->solvedUntil() << endl;
+            // i>=0 and i<solvedUntil()
+            if( i>=0 && i< slam->solvedUntil() ) {
+                Matrix4d w_T_c_optimized, w_T_c;
+                cout << slam->getNodePose(i, w_T_c_optimized ) << " ";
+                cout << manager->getNodePose(i, w_T_c ) << " \n";
+                cout << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c_optimized ) << endl;
+
+                int world_id = manager->which_world_is_this( i );
+                cout << "world_id=" << world_id << endl;
+
+                if( jmb.count( world_id ) > 0 )
+                    jmb[ world_id ].push_back( w_T_c_optimized );
+                else
+                    jmb[ world_id ] = vector<Matrix4d>();
+            }
+
+
+            // i>solvedUntil() < manager->getNodeLen()
+            if( i>=slam->solvedUntil() && manager->getNodeLen() ) {
+                cout << "hu\n";
+            }
+
+        }
+        #endif
+
+
+        cout << "[opt_traj_publisher_colored_by_world]publish\n";
+        // publish jmb
+        #if 0
+        for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+            string ns = "world#"+to_string( it->first );
+
+            float c_r, c_g, c_b;
+            cv::Scalar color = FalseColors::randomColor( it->first );
+            c_r = color[0]/255.;
+            c_g = color[1]/255.;
+            c_b = color[2]/255.;
+
+
+            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+        }
+        #endif
+
+
+        // book keeping
+        loop_rate.sleep();
+    }
+}
 
 
 int main( int argc, char ** argv)
@@ -240,9 +328,11 @@ int main( int argc, char ** argv)
     viz->setPathPublisher( pub_path );
     viz->setOdometryPublisher( pub_odometry_opt );
 
-    // setup manager publishers threads
+    // setup manager publishers threads - adhoc
     std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
-    std::thread th4( periodic_publish, viz );
+    // std::thread th4( periodic_publish, viz );
+    std::thread th5( monitor_disjoint_set_datastructure, manager );
+    // std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz );
 
 
 
@@ -261,7 +351,9 @@ int main( int argc, char ** argv)
     // th1.join();
     // th2.join();
     th3.join();
-    th4.join();
+    // th4.join();
+    th5.join();
+    // th6.join();
 
     th_slam.join();
 

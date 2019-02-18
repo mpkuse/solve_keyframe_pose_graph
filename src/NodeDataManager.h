@@ -76,7 +76,7 @@ public:
     // void loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  );
     void loopclosure_pose_callback( const cerebro::LoopEdge::ConstPtr& msg  );
 
-    void print_nodes_lengths();
+    void print_nodes_lengths() const;
 
 
     // Public interface
@@ -139,14 +139,14 @@ private:
 public:
     void rcvd_kidnap_indicator_callback( const std_msgs::HeaderConstPtr& rcvd_ );
 
-    const ros::Time last_kidnap_ended();
-    const ros::Time last_kidnap_started();
-    bool curr_kidnap_status() { return current_kidnap_status; }
+    const ros::Time last_kidnap_ended() const ;
+    const ros::Time last_kidnap_started() const;
+    bool curr_kidnap_status() const { return current_kidnap_status; }
 
 
-    ros::Time stamp_of_kidnap_i_started( int i );
-    ros::Time stamp_of_kidnap_i_ended( int i );
-    int n_kidnaps();
+    ros::Time stamp_of_kidnap_i_started( int i ) const;
+    ros::Time stamp_of_kidnap_i_ended( int i ) const;
+    int n_kidnaps() const;
 
 
     int nodeidx_of_world_i_started( int i );
@@ -157,7 +157,9 @@ public:
     // this time is.
     //-----------|       |------------------|         |--------------
     //  ^^w0        ^-1       ^^w1               ^^-2           ^^w2
-    int which_world_is_this( const ros::Time _t );
+    int which_world_is_this( const ros::Time _t ) const ;
+    // int which_world_is_this( int i ); //given the node idx, gets the which_world_is_this.
+
 
 
     Worlds worlds_handle; //< To keep track of co-ordinates transform matrix between the worlds

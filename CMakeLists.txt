@@ -67,6 +67,7 @@ add_executable( keyframe_pose_graph_slam
         src/Worlds.cpp
         )
 
+add_executable( test_disjointset_imp src/test_disjointset.cpp )
 
 # Debug Node
 #add_executable( debug_kf_slam_node
@@ -86,6 +87,8 @@ target_link_libraries( keyframe_pose_graph_slam
     ${CERES_LIBRARIES}
 #    ${ZLIB_LIBRARIES}
 )
+
+target_link_libraries(  test_disjointset_imp ${catkin_LIBRARIES} )
 
 #target_link_libraries( debug_kf_slam_node
 #    ${OpenCV_LIBRARIES}

@@ -44,20 +44,23 @@ public:
     void setOdometryPublisher( const ros::Publisher& pub );
 
     // void publishLastNNodes( int n ); //< Removal
-    void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b );
+    void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b ) const;
     void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns,
         float r, float g, float b,
         int idx_partition,
-        float r1, float g1, float b1, bool enable_camera_visual=true  );
+        float r1, float g1, float b1, bool enable_camera_visual=true  ) const;
     // void publishEdgesAsLineArray( int n ); //< removal
-    void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b );
-    void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 );
-    void publishPath( const vector<Matrix4d>& w_T_ci, int start, int end  );
-    void publishPath( const nav_msgs::Path& path );
-    void publishOdometry( const vector<Matrix4d>& w_T_ci );
-    void publishLastNEdges( int n );
+    void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b ) const;
+    void publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 ) const ;
+    void publishPath( const vector<Matrix4d>& w_T_ci, int start, int end  ) const;
+    void publishPath( const nav_msgs::Path& path ) const;
+    void publishOdometry( const vector<Matrix4d>& w_T_ci ) const;
+    void publishLastNEdges( int n ) const;
 
-    void publishSlamResidueVisual( int n );
+    void publishSlamResidueVisual( int n ) const;
+
+    // for kidnap
+    void publishNodesAsLineStrip__ColorByID( const vector<Matrix4d>& jmb, const vector<int>& ids, const string& ns ) const;
 
 private:
     const NodeDataManager * manager=NULL;

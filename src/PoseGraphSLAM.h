@@ -55,7 +55,8 @@ using json = nlohmann::json;
 class PoseGraphSLAM
 {
 public:
-    PoseGraphSLAM( const NodeDataManager* _manager );
+    // PoseGraphSLAM( const NodeDataManager* _manager );
+    PoseGraphSLAM( NodeDataManager* _manager );
     ~PoseGraphSLAM( ) { deallocate_optimization_variables(); }
     // void stop() { run = false; }
 
@@ -72,13 +73,17 @@ public:
 
     // Get the optimized pose at node i. This function is thread-safe
     const Matrix4d getNodePose( int i ) const; //< this gives the pose from the optimization variable
-    void getNodePose( int i, Matrix4d& ) const;
+    bool nodePoseExists( int i ) const; //< returns if ith node pose exist
+    // bool getNodePose( int i, Matrix4d& ) const; //TODO: removal
     int nNodes() const;
     void getAllNodePose( vector<Matrix4d>& vec_w_T_ci ) const;
 
 
 
-    int solvedUntil() { return solved_until; } // returns the node index until which solve() has operated. Thread-safe with atomics
+    int solvedUntil() const {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        return solved_until;
+    } // returns the node index until which solve() has operated. Thread-safe with atomics
 
 
     void deallocate_optimization_variables();
@@ -91,7 +96,8 @@ public:
 private:
     // global variables
     atomic<bool> new_optimize6DOF_isEnabled;
-    const NodeDataManager * manager;
+    // const NodeDataManager * manager;
+    NodeDataManager * manager;
 
     // Optimization variables
     mutable std::mutex  mutex_opt_vars;
@@ -128,7 +134,10 @@ private:
         }
     };
 
-    atomic<int> solved_until;
+    // atomic<int> solved_until;
+    int solved_until;
+
+
 
 
     // The optimization problem - CERES

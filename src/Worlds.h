@@ -41,15 +41,26 @@ public:
     bool is_exist( int m, int n ) const ;
     void getAllKeys( vector<std::pair<int,int> >& all_keys ) const ;
 
-    void print_summary();
+    void print_summary() const;
+    const string disjoint_set_status() const ;
+
 
 
     // Just infor me on start of the worlds
     void world_starts( ros::Time _t );
     void world_ends( ros::Time _t );
 
+
+    // Set related (query from disjoiunt set data-structure)
+    int find_setID_of_world_i( int i ) const; //< returns the setid of world i
+    int n_worlds() const; //< number of worlds
+    int n_sets() const;   //< number of sets
+
+
 private:
     // mutable std::mutex  changes_to_the_world TODO ;
+    mutable std::mutex mutex_world;
+
 
     std::map< std::pair<int,int> , Matrix4d > rel_pose_between_worlds__wb_T_wa;
     std::map< std::pair<int,int> , string > rel_pose_between_worlds__wb_T_wa___info_string;
@@ -58,9 +69,9 @@ private:
     vector<ros::Time> vec_world_starts;
     vector<ros::Time> vec_world_ends;
 
-    //TODO: disjoint set
-    mp::DisjointSetForest<bool> disjoint_set;
-    string disjoint_set_debug; 
+    //disjoint set. TODO: best if you use the boost::disjoint_set rather than a DIY one. the DIY one is prone to errors in implementation.
+    mp::DisjointSetForest<bool> disjoint_set; //
+    string disjoint_set_debug;
 
 
 };

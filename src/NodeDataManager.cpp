@@ -124,7 +124,6 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 
 void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::ConstPtr& msg  )
 {
-    // ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
     // Add a new edge ( 2 node*)
 
 
@@ -134,6 +133,11 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     double goodness = (double)msg->weight;
     // assert( op_mode == 30 );
     string description = msg->description;
+
+    cout <<  TermColor::iYELLOW() << "[NodeDataManager::loopclosure_pose_callback]";
+    cout << "t_a=" << t_a << "   t_b=" << t_b << "   wt=" << msg->weight;
+    cout << "  description=" << msg->description << TermColor::RESET() << endl;
+
 
     // retrive rel-pose  p_T_c
     Matrix4d b_T_a = Matrix4d::Zero();
@@ -147,6 +151,8 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     b_T_a(3,3) = 1.0;
 
 
+    #if 0
+    //old code remove this TODO
     // Lock
     node_mutex.lock() ;
 
@@ -158,6 +164,16 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
 
     // Unlock
     node_mutex.unlock();
+    #endif
+
+
+    int index_t_a, index_t_b;
+    {
+        std::lock_guard<std::mutex> lk(node_mutex);
+        index_t_a = find_indexof_node(node_timestamps, t_a );
+        index_t_b = find_indexof_node(node_timestamps, t_b );
+
+    }
 
     // cout << "[NodeDataManager] Rcvd Loop Edge " << index_t_c << "<--->" << index_t_p << endl;
     // assert( t_c > t_p );
@@ -184,7 +200,7 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
 }
 
 // internal node queue length info
-void NodeDataManager::print_nodes_lengths()
+void NodeDataManager::print_nodes_lengths() const
 {
     {
         std::lock_guard<std::mutex> lk(node_mutex);
@@ -415,253 +431,6 @@ void NodeDataManager::reset_node_info_data()
     node_pose_covariance.clear();
 }
 
-
-////////////////////// Save Data to file for analysis //////////////
-/*
-void NodeDataManager::_print_info_on_npyarray( const cnpy::NpyArray& arr )
-{
-
-    // #Dimensions
-    cout << "arr.shape.size()" << arr.shape.size() << endl;
-
-    // X.shape
-    int raw_data_size = 1;
-    for( int i=0 ; i< arr.shape.size() ; i++ ){
-            cout << arr.shape[i] << ", ";
-            raw_data_size *= arr.shape[i];
-    }
-    cout << endl;
-
-    // Ordering
-    cout << "arr.fortran_order " << arr.fortran_order << endl;
-
-    // Raw data
-    double * loaded_data = (double*) arr.data;
-    for( int i=0 ; i<raw_data_size ; i++ )
-        cout << loaded_data[i] << " ";
-}
-
-
-bool NodeDataManager::loadFromDebug( const string& base_path, const vector<bool>& edge_mask )
-{
-    cout << "##########################################\n";
-    cout << " NodeDataManager::loadFromDebug : "<< base_path << endl;
-    cout << "##########################################\n";
-
-    cout << "edge_mask.size()="<< edge_mask.size() << endl;
-    for( int i=0 ; i<edge_mask.size() ; i++ )
-        cout << edge_mask[i];
-    cout << endl;
-
-    node_mutex.lock();
-    edge_mutex.lock();
-    reset_node_info_data();
-    reset_edge_info_data();
-
-    //
-    // Load Data on Nodes
-    // npz_t := std::map<std::string, NpyArray>;
-    cnpy::npz_t my_npz = cnpy::npz_load( base_path+"/graph_data.npz" );
-    // cout << "Contains files: \n";
-    // for( cnpy::npz_t::iterator i=my_npz.begin() ; i!= my_npz.end() ; i++ )
-    // {
-    //     cout << i->first << endl;
-    // }
-
-    reset_node_info_data();
-    for( int i=0 ; ; i++ )
-    {
-        if( my_npz.count(  "w_T_"+to_string(i) ) == 0  )
-            break;
-
-        // w_T_c
-        auto arr = my_npz[ "w_T_"+to_string(i) ];
-        // _print_info_on_npyarray( arr );
-        // Map<Matrix4d> w_T_c( (double*)arr.data );
-        Matrix4d w_T_c( (double*) arr.data );
-
-        node_pose.push_back( w_T_c );
-    }
-    cout << "Loaded " << node_pose.size() << " nodes" << endl;
-
-
-
-    //
-    // Load Data on Edges
-    reset_edge_info_data();
-
-
-
-    // a) Edge Idx
-    auto arr0 = my_npz[ "loopclosure_edges" ]; // this is of size 2E
-    auto arr1 = my_npz[ "loopclosure_edges_goodness" ]; // this is of size 2E
-    assert( arr0.shape.size() == 1 && arr1.shape.size() == 1 );
-    assert( arr0.shape[0]/2 == arr1.shape[0]);
-    int nloops = arr0.shape[0]/2;
-    cout << "There are "<< nloops << " loops\n";
-    int * loaded_data = (int*) arr0.data;
-
-    assert( edge_mask.size() == 0 || edge_mask.size() == nloops );
-
-    for( int i=0 ; i<nloops; i++ )
-    {
-        // cout <<i << " " << loaded_data[2*i] << "<-->" << loaded_data[2*i+1] << endl;
-        if( edge_mask.size() > 0 && edge_mask[i] == false )
-            continue;// dont load the edge if edge_mask has non zero size and mask is true.
-
-
-
-        std::pair<int,int> p;
-        p.first = loaded_data[2*i];
-        p.second = loaded_data[2*i+1];
-        this->loopclosure_edges.push_back( p );
-    }
-    // _print_info_on_npyarray( arr0 );
-
-
-    // b) Goodness
-    double * goodness_loaded_data = (double*) arr1.data;
-    for( int i=0 ; i<nloops ; i++ )
-    {
-        if( edge_mask.size() > 0 && edge_mask[i] == false )
-            continue;// dont load the edge if edge_mask has non zero size and mask is true.
-
-        this->loopclosure_edges_goodness.push_back( goodness_loaded_data[i] );
-    }
-
-
-    // c) p_T_c
-    for( int i=0 ; ; i++ )
-    {
-        if( my_npz.count( "p_T_c__"+to_string(i) ) == 0  )
-            break;
-
-        if( edge_mask.size() > 0 && edge_mask[i] == false )
-            continue;// dont load the edge if edge_mask has non zero size and mask is true.
-
-        auto arr_ed_pose = my_npz[  "p_T_c__"+to_string(i) ];
-
-        Matrix4d p_T_c( (double*)  arr_ed_pose.data );
-
-        this->loopclosure_p_T_c.push_back( p_T_c );
-    }
-    cout << "Loaded "<< loopclosure_p_T_c.size() << " relative poses for edges (computed)\n";
-
-    // assert( nloops == loopclosure_p_T_c.size() );
-
-    edge_mutex.unlock();
-    node_mutex.unlock();
-
-
-    // Display All
-    assert( loopclosure_edges.size() == loopclosure_edges_goodness.size() );
-    assert( loopclosure_edges.size() == loopclosure_p_T_c.size() );
-    for( int i=0 ; i<loopclosure_edges.size() ; i++ )
-    {
-        cout << i << " " << loopclosure_edges[i].first << "<-->" << loopclosure_edges[i].second << " ";
-        cout << "weight=" << loopclosure_edges_goodness[i] << " ";
-        cout << "p_T_c="<< PoseManipUtils::prettyprintMatrix4d( loopclosure_p_T_c[i] );
-        cout << endl;
-    }
-    cout << "Done Loading Pose Graph\n";
-
-}
-
-bool NodeDataManager::saveForDebug( const string& base_path )
-{
-    cout << "##########################################\n";
-    cout << " NodeDataManager::saveForDebug : "<< base_path << endl;
-    cout << "##########################################\n";
-
-
-    // ofstream myfile;
-    // myfile.open( base_path+"/test.txt" );
-    // myfile << "Test file\n";
-    // myfile.close();
-
-
-    //
-    // Write Info on Nodes
-    vector<unsigned int> shape;
-
-    //  // examples with cnpy
-    // // Remember than eigen internally stores data as column major,
-    // cout << "node_pose_0\n" << node_pose[0] << endl;
-    // shape = {4,4};
-    // cnpy::npy_save( base_path+"/graph_data.npy", node_pose[0].data(),  &shape[0], 2, "w" );
-    // cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
-    //
-    //
-    // // load the saved data
-    // cnpy::NpyArray arr = cnpy::npy_load( base_path+"/graph_data.npy" );
-    // // _print_info_on_npyarray( arr );
-    //
-    // // Matrix4d M;
-    // Map<Matrix4d> M( (double*)arr.data );
-    // cout << "M\n" << M << endl;
-    //
-    int hash_nodes = getNodeLen();
-    int hash_edges = getEdgeLen();
-
-    shape = {4,4};
-    node_mutex.lock();
-    cnpy::npz_save( base_path+"/graph_data.npz", "w_T_0", node_pose[0].data(),  &shape[0], 2, "w" );
-    for( int i=1 ; i<hash_nodes ; i++ )
-    {
-        cnpy::npz_save( base_path+"/graph_data.npz", "w_T_"+to_string(i), node_pose[i].data(),  &shape[0], 2, "a" );
-    }
-    cout << "written "<< hash_nodes << " pose to .npz\n";
-
-    //TODO Also save node_pose_timestamps;
-    shape = {6,6};
-    for( int i=0 ; i<hash_nodes ; i++ )
-    {
-        cnpy::npz_save( base_path+"/graph_data.npz", "cov_w_T_"+to_string(i), node_pose_covariance[i].data(), &shape[0], 2, "a"  );
-    }
-    node_mutex.unlock();
-
-
-
-    //
-    // Write Info on Edges
-    edge_mutex.lock();
-    vector<int> lp_edges;
-    shape = {4,4};
-    for( int i=0 ; i<loopclosure_edges.size() ; i++ )
-    {
-        lp_edges.push_back( loopclosure_edges[i].first );
-        lp_edges.push_back( loopclosure_edges[i].second );
-
-        cnpy::npz_save( base_path+"/graph_data.npz", "p_T_c__"+to_string(i), loopclosure_p_T_c[i].data(),  &shape[0], 2, "a" );
-
-        cout << i << ":" <<  loopclosure_edges[i].first << "<-->" <<  loopclosure_edges[i].second << "; ";
-        cout << "goodness=" << loopclosure_edges_goodness[i] << "; ";
-        cout << PoseManipUtils::prettyprintMatrix4d(  loopclosure_p_T_c[i] );
-        cout << "\n";
-    }
-
-    shape = {lp_edges.size()};
-    cnpy::npz_save( base_path+"/graph_data.npz", "loopclosure_edges",  lp_edges.data(), &shape[0], 1, "a" );
-    shape = {loopclosure_edges_goodness.size()};
-    cnpy::npz_save( base_path+"/graph_data.npz", "loopclosure_edges_goodness",  loopclosure_edges_goodness.data(), &shape[0], 1, "a" );
-
-    edge_mutex.unlock();
-    cout << "written "<< hash_edges << " loopedges to .npz\n";
-
-
-    // ---:files:---
-    // w_T_i \forall i=1 ... N
-    // p_T_c__i \forall i=1 ... E
-    // loopclosure_edges. 2E sized vector
-    // loopclosure_edges_goodness. E sized vector
-
-
-    cout << "Done@\n";
-    return true;
-
-}
-
-*/
 
 bool NodeDataManager::saveAsJSON( const string& base_path )
 {
@@ -914,9 +683,9 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
 void NodeDataManager::mark_as_kidnapped( const ros::Time _t )
 {
     assert( current_kidnap_status == false && "[NodeDataManager::mark_as_kidnapped] you can mark as kidnapped only when i was not kidnapped.\n");
-    current_kidnap_status = true;
     {
         std::lock_guard<std::mutex> lk(mutex_kidnap);
+        current_kidnap_status = true;
         kidnap_starts.push_back( _t );
     }
 }
@@ -924,14 +693,14 @@ void NodeDataManager::mark_as_kidnapped( const ros::Time _t )
 void NodeDataManager::mark_as_unkidnapped( const ros::Time _t )
 {
     assert( current_kidnap_status == true && "[NodeDataManager::mark_as_unkidnapped] you can mark as unkidnapped only when i was kidnapped.\n");
-    current_kidnap_status = false;
     {
         std::lock_guard<std::mutex> lk(mutex_kidnap);
+        current_kidnap_status = false;
         kidnap_ends.push_back( _t );
     }
 }
 
-const ros::Time NodeDataManager::last_kidnap_ended()
+const ros::Time NodeDataManager::last_kidnap_ended() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
     if( kidnap_ends.size() > 0 ) {
@@ -942,7 +711,7 @@ const ros::Time NodeDataManager::last_kidnap_ended()
     }
 }
 
-const ros::Time NodeDataManager::last_kidnap_started()
+const ros::Time NodeDataManager::last_kidnap_started() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
     if( kidnap_starts.size() > 0 ) {
@@ -954,7 +723,7 @@ const ros::Time NodeDataManager::last_kidnap_started()
 }
 
 
-int NodeDataManager::n_kidnaps()
+int NodeDataManager::n_kidnaps() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
     return kidnap_ends.size();
@@ -962,7 +731,7 @@ int NodeDataManager::n_kidnaps()
 
 // #define __KIDNAP_START_ENDS___debug( msg ) msg;
 #define __KIDNAP_START_ENDS___debug( msg ) ;
-ros::Time NodeDataManager::stamp_of_kidnap_i_started( int i )
+ros::Time NodeDataManager::stamp_of_kidnap_i_started( int i ) const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
 
@@ -974,7 +743,7 @@ ros::Time NodeDataManager::stamp_of_kidnap_i_started( int i )
     return ros::Time();
 }
 
-ros::Time NodeDataManager::stamp_of_kidnap_i_ended( int i )
+ros::Time NodeDataManager::stamp_of_kidnap_i_ended( int i ) const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
     if( i>=0 && i<kidnap_ends.size() ) {
@@ -985,9 +754,8 @@ ros::Time NodeDataManager::stamp_of_kidnap_i_ended( int i )
     return ros::Time();
 }
 
-int NodeDataManager::which_world_is_this( const ros::Time _t )
+int NodeDataManager::which_world_is_this( const ros::Time _t ) const
 {
-    // TODO: lock
     std::lock_guard<std::mutex> lk(mutex_kidnap);
 
 
@@ -1059,6 +827,15 @@ int NodeDataManager::which_world_is_this( const ros::Time _t )
 
 }
 
+/*
+int NodeDataManager::which_world_is_this( int i ) //given the node idx, gets the which_world_is_this.
+{
+    const ros::Time _t = this->getNodeTimestamp( i );
+    return which_world_is_this( _t );
+
+}
+*/
+
 
 // #define __WORLD_START_ENDS___debug( msg ) msg;
 #define __WORLD_START_ENDS___debug( msg ) ;
@@ -1106,8 +883,11 @@ int NodeDataManager::nodeidx_of_world_i_started( int i )
 int NodeDataManager::nodeidx_of_world_i_ended( int i )
 {
     // returns a large number if the world i never ended
+    int n_kidnap_ends;
+    {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
-    int n_kidnap_ends = kidnap_ends.size();
+    n_kidnap_ends = kidnap_ends.size();
+    }
 
     if( i<0 ) {
         __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] i cannot be negative. no such world\n");

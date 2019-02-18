@@ -1,6 +1,10 @@
 #include "PoseGraphSLAM.h"
 
-PoseGraphSLAM::PoseGraphSLAM( const NodeDataManager* _manager ): manager( _manager )
+// PoseGraphSLAM::PoseGraphSLAM( const NodeDataManager* _manager ): manager( _manager )
+// {
+//     solved_until = 0;
+// }
+PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager ): manager( _manager )
 {
     solved_until = 0;
 }
@@ -9,17 +13,7 @@ PoseGraphSLAM::PoseGraphSLAM( const NodeDataManager* _manager ): manager( _manag
 //############## Public Interfaces to retrive optimized poses ####################
 //################################################################################
 
-// It is on purpose I am returning const Matrix4d and not const Matrix4d&
-const Matrix4d PoseGraphSLAM::getNodePose( int i ) const
-{
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    assert( i>=0 && i <opt_quat.size() );
 
-    Matrix4d w_T_cam;
-    PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
-
-    return w_T_cam;
-}
 
 void PoseGraphSLAM::getAllNodePose( vector<Matrix4d>& w_T_ci ) const
 {
@@ -37,11 +31,14 @@ int PoseGraphSLAM::nNodes() const
 }
 
 
-void PoseGraphSLAM::getNodePose( int i, Matrix4d& out_w_T_nodei ) const
+/* TODO: Removal
+bool PoseGraphSLAM::getNodePose( int i, Matrix4d& out_w_T_nodei ) const
 {
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
 
     assert( i < nNodes() );
+    if( i<0 || i>= nNodes() )
+        return false;
 
     // qi,ti --> w_T_ci
     Eigen::Map<const Eigen::Quaternion<double> > q_1( opt_quat[i] );
@@ -50,7 +47,32 @@ void PoseGraphSLAM::getNodePose( int i, Matrix4d& out_w_T_nodei ) const
     out_w_T_nodei = Matrix4d::Identity();
     out_w_T_nodei.topLeftCorner<3,3>() = q_1.toRotationMatrix();
     out_w_T_nodei.col(3).head(3) = p_1;
+
+    return true;
 }
+*/
+
+// It is on purpose I am returning const Matrix4d and not const Matrix4d&
+const Matrix4d PoseGraphSLAM::getNodePose( int i ) const
+{
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    assert( i>=0 && i <opt_quat.size() );
+
+    Matrix4d w_T_cam;
+    PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
+
+    return w_T_cam;
+}
+
+bool PoseGraphSLAM::nodePoseExists( int i ) const //< returns if ith node pose exist
+{
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    if( i>=0 && i <opt_quat.size() )
+        return true;
+    return false;
+
+}
+
 
 void PoseGraphSLAM::allocate_and_append_new_opt_variable_withpose( const Matrix4d& pose )
 {
@@ -119,8 +141,8 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
         json opt_var_i;
 
         // Save Optimed pose
-        Matrix4d w_T_c_opt;
-        getNodePose( i, w_T_c_opt );
+        Matrix4d w_T_c_opt = getNodePose( i );
+        // getNodePose( i, w_T_c_opt );
 
         std::stringstream ss;
         ss << w_T_c_opt.format(CSVFormat);
@@ -473,7 +495,7 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
 #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
 
 #define __PoseGraphSLAM_new_optimize6DOF_odom( msg ) msg;
-// #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
+// #define __PoseGraphSLAM_new_optimize6DOF_odom( msg ) ;
 
 
 void PoseGraphSLAM::new_optimize6DOF()
@@ -492,49 +514,23 @@ void PoseGraphSLAM::new_optimize6DOF()
 
     bool marked_previous_nodes_opt_variables_as_constant = false; //< this is used so that I only mark variables as constant 1 time and avoid repeating
 
-    // Whenever kidnap happens, the vins_estimator is restarted. This results in a new co-ordinate frame (new world) for the new incoming poses (after unkidnap)
-    // This map stores the estimates of relative transforms between 2 world's. For example map[2,4] will store transform between world-2 and world-4.
-    // Worlds worlds_handle; //TODO consider moving this to NodeDataManager class.
+    // Whenever kidnap happens, the vins_estimator is restarted. This results in a new co-ordinate frame (new world)
+    // for the new incoming poses (after unkidnap)
+    // This map stores the estimates of relative transforms between 2 world's. For example map[2,4] will store
+    // transform between world-2 and world-4. Look at class Worlds that stores the info on relative poses of 2 worlds
+
 
     while( new_optimize6DOF_isEnabled )
     {
         cout << "---\n";
         // cout << "[PoseGraphSLAM::new_optimize6DOF]\n";
         // cout << "manager->print_nodes_lengths()\t"; manager->print_nodes_lengths();
-        cout << "PoseGraphSLAM::n_opt_variables = " << this->n_opt_variables() << endl;
+        // cout << "PoseGraphSLAM::n_opt_variables = " << this->n_opt_variables() << endl;
         node_len = manager->getNodeLen();
         loopedge_len = manager->getEdgeLen();
+        cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << endl;
 
 
-        #if 0
-        //---------
-        // If the current state is found to be kidnapped,
-        // a good strategy is to mark the previous nodes opt_pose as constants
-        //----------
-        // TODO: mark as constant from penultimate_kidnap_ended() --> last_kidnap_started()
-        if( manager->curr_kidnap_status() == true ) { // this code executes only the state is kidnapped
-            // loop from 0 to last_kidnap_started() and mark those optimization
-            // variables as constants
-
-            // this has to be done only one time in the kidnapped mode
-            if( !marked_previous_nodes_opt_variables_as_constant ) {
-                for( int qqq=0 ; qqq<node_len ; qqq++ ) {
-                    if( manager->getNodeTimestamp( qqq ) > manager->last_kidnap_started() ) {
-                        break;
-                    }
-                    cout << TermColor::YELLOW() <<  "Mark node#" << qqq << "'s optimization variables as constant " << TermColor::RESET() << endl;
-                    {
-                        problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(qqq) );
-                        problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(qqq)  );
-                    }
-                }
-            }
-            marked_previous_nodes_opt_variables_as_constant = true;
-
-        }
-        else { marked_previous_nodes_opt_variables_as_constant = false; }
-
-        #endif
 
 
         //-------------------
@@ -556,10 +552,11 @@ void PoseGraphSLAM::new_optimize6DOF()
             //###################
             __PoseGraphSLAM_new_optimize6DOF_odom_debug(
             cout << TermColor::CYAN() << "Add new optimization variables for each node and initialize them correctly. push_back optimization variables for each of these" << TermColor::RESET() << endl;
+            cout << "loop from u=" << prev_node_len <<" ; u<" << node_len << " ; u++\n";
             )
             for( int u=prev_node_len ; u<node_len ; u++ ) {
-                int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
-
+                // int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
+                __PoseGraphSLAM_new_optimize6DOF_odom_debug( cerr << "u=" << u << " " ; )
                 if( u==0 ) { //0th node.
                     allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
                 }
@@ -581,14 +578,19 @@ void PoseGraphSLAM::new_optimize6DOF()
                     Matrix4d w_M_u = manager->getNodePose(u);
                     Matrix4d last_M_u = w_M_last.inverse() * w_M_u;
 
+
                     Matrix4d w_T_last = this->getNodePose( (int)this->solvedUntil()-1 );
+                    // Matrix4d w_T_last;
+                    // bool status = this->getNodePose(  (int)this->solvedUntil()-1 , w_T_last  );
+
                     Matrix4d w_TM_u = w_T_last * last_M_u;
                     //       ^^^^ this is in its own world frame.
 
                     allocate_and_append_new_opt_variable_withpose( w_TM_u );
 
-                    #if 1
-                    // This is the new code added for handling kidnaps
+
+                    #if 0
+                    // This is the new code added for handling kidnaps #corrected-node-pose-IPSUMLOREM
                     if( world_of_u == 0 ) {
                         ;
                     }
@@ -719,9 +721,18 @@ void PoseGraphSLAM::new_optimize6DOF()
                 cout << "(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(4) << weight;
                 cout << "\n\tdescription_string=" << manager->getEdgeDescriptionString(e) << "\n";
                 cout << "\tbTa(observed)="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
-                cout << "\ta's world is: "<< manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) )
+
+                int __a_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) );
+                int __b_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) );
+                if( __b_world_is != __a_world_is ) cout << "\t\t>>>>>><<<<<<==========\n";
+                cout << TermColor::iWHITE() ;
+                cout << "\ta's world is: "<< __a_world_is
                      << "\t"
-                     << "b's world is: " << manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) ) << endl;
+                     << "b's world is: " <<  __b_world_is;
+                cout << TermColor::RESET() << endl;;
+                cout << "world#" << __a_world_is << " is in setID=" << manager->worlds_handle.find_setID_of_world_i( __a_world_is ) << "\t\t" ;
+                cout << "world#" << __b_world_is << " is in setID=" << manager->worlds_handle.find_setID_of_world_i( __b_world_is ) << "\n" ;
+                manager->worlds_handle.print_summary();
 
 
 
@@ -736,17 +747,23 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                     if( world_of_a != world_of_b && world_of_a >=0 && world_of_b >=0 )
                     {
+                        // #corrected-node-pose-IPSUMLOREM
                         // the two edge-end-pts are in different worlds.
                         cout << TermColor::BLUE() ;
                         cout << "The two edge-end-pts are in different worlds.\n";
+
 
                         if( manager->worlds_handle.is_exist(world_of_b,world_of_a) )
                         {
                             auto rel_wb_T_wa = manager->worlds_handle.getPoseBetweenWorlds( world_of_b, world_of_a );
                             cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
+                            cout << "[TODO] likely no action is needed as the initial guesses must be in order by now\n";
                             cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
                         }
                         else {
+                            cout << "CURRENT STATUS OF WORLDS (disjoint set) before:\n";
+                            manager->worlds_handle.print_summary();
+                            cout << "....\n";
                             cout << "I DONOT know the relative transforms between the 2 world, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
 
                             // compute the relative transforms between the 2 worlds
@@ -756,10 +773,10 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                             Matrix4d wb_T_a = wb_T_b * b_T_a_observed;
                             Matrix4d wb_T_wa = wb_T_a * wa_T_a.inverse();
-                            cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << endl;
+                            cout << "I just computed the rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << endl;
 
                             // set the computed pose into the global (to this thread) data-structure
-                            cout << "rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
+                            cout << "setting var rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
 
                             string info_string = "this pose computed from edge "+ std::to_string(_a) + " <--> " + std::to_string(_b);
                             manager->worlds_handle.setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa,  info_string );
@@ -767,12 +784,19 @@ void PoseGraphSLAM::new_optimize6DOF()
 
                             // set all earlier node poses of [world-a-start, _a]
                             cout << TermColor::RESET() << TermColor::BLUE();
-                            cout << "Set all earlier node poses of [world-a-start, world_of_a]\n";
+                            cout << "[TODO] Set all earlier node poses (initial gueses) of [world-a-start, world_of_a]\n";
                             cout << "world_of_a=" << world_of_a << "\tworld_of_a starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_a) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_a) << endl;
+                            cout << "world_of_b=" << world_of_b << "\tworld_of_b starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_b) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_b) << endl;
+
+                            cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
+                            manager->worlds_handle.print_summary();
+                            cout << "....\n";
+
 
                         }
 
                         cout << TermColor::RESET() << endl;
+
                     }
                 }
                 #endif
@@ -880,6 +904,10 @@ void PoseGraphSLAM::new_optimize6DOF()
     cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::new_optimize6DOF`" << TermColor::RESET() << endl;
 
 
+    #if 1
+    ///// Next bit of code just prints info
+
+
     //// Info on worlds
     cout << TermColor::YELLOW() ;
     cout << "Info on worlds start and end times from NodeDataManager\n";
@@ -933,6 +961,8 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << "\t\t";
     }
     cout << endl;
+
+    #endif
 
 
 

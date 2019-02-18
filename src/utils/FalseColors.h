@@ -73,10 +73,56 @@ public:
 
   static cv::Scalar randomColor( int rng )
   {
-      int icolor = (unsigned) rng;
+    //   int icolor = (unsigned) rng;
+
+      srand( rng );
+      int icolor = (unsigned) rand();
       //TODO: to get even better colors use rng to generave a hue. With max saturation and brightness convert it to RGB
       return cv::Scalar( icolor&255, (icolor>>8)&255, (icolor>>16)&255 );
   }
+
+  static std::vector<std::string>
+  split( std::string const& original, char separator )
+  {
+        std::vector<std::string> results;
+        std::string::const_iterator start = original.begin();
+        std::string::const_iterator end = original.end();
+        std::string::const_iterator next = std::find( start, end, separator );
+        while ( next != end ) {
+            results.push_back( std::string( start, next ) );
+            start = next + 1;
+            next = std::find( start, end, separator );
+        }
+        results.push_back( std::string( start, next ) );
+        return results;
+    }
+
+  // append a status image . ';' separated
+  static void append_status_image( cv::Mat& im, const string& msg, float txt_size=0.4, cv::Scalar bg_color=cv::Scalar(0,0,0), cv::Scalar txt_color=cv::Scalar(255,255,255) )
+  {
+        bool is_single_channel = (im.channels()==1)?true:false;
+        txt_size = (txt_size<0.1 || txt_size>2)?0.4:txt_size;
+
+        std::vector<std::string> msg_tokens = split(msg, ';');
+        int status_im_height = 50+20*msg_tokens.size();
+
+        cv::Mat status;
+        if( is_single_channel )
+            status = cv::Mat(status_im_height, im.cols, CV_8UC1, cv::Scalar(0,0,0) );
+        else
+            status = cv::Mat(status_im_height, im.cols, CV_8UC3, bg_color );
+
+
+        for( int h=0 ; h<msg_tokens.size() ; h++ )
+            cv::putText( status, msg_tokens[h].c_str(), cv::Point(10,20+20*h),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    txt_size, txt_color, 1.5 );
+
+
+        cv::vconcat( im, status, im );
+
+
+    }
 
 
 private:

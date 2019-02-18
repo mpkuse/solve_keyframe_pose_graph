@@ -57,7 +57,7 @@ void VizPoseGraph::publishLastNNodes( int n )
 
 
 void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
-    const string& ns, float r, float g, float b )
+    const string& ns, float r, float g, float b ) const
 {
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
@@ -95,7 +95,7 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
     const string& ns, float r, float g, float b,
     int idx_partition,
     float r1, float g1, float b1,
-    bool enable_camera_visual  )
+    bool enable_camera_visual  ) const
 {
     assert( idx_partition <= w_T_ci.size() );
 
@@ -204,7 +204,7 @@ void VizPoseGraph::publishEdgesAsLineArray( int n )
 }
 #endif
 
-void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b )
+void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b ) const
 {
     visualization_msgs::Marker marker ;
     RosMarkerUtils::init_camera_marker( marker, .6 );
@@ -223,7 +223,7 @@ void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& n
 
 
 
-void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 )
+void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, int idx_partition, float r1, float g1, float b1 ) const
 {
     assert( idx_partition <= w_T_ci.size() );
 
@@ -254,7 +254,7 @@ void VizPoseGraph::publishNodes( const vector<Matrix4d>& w_T_ci, const string& n
 
 
 
-void VizPoseGraph::publishPath( const vector<Matrix4d>& w_T_ci, int start, int end  )
+void VizPoseGraph::publishPath( const vector<Matrix4d>& w_T_ci, int start, int end  ) const
 {
 
     assert( start >=0 && start <= w_T_ci.size() && end >=0 && end <= w_T_ci.size() && start < end  );
@@ -297,7 +297,7 @@ void VizPoseGraph::publishPath( const vector<Matrix4d>& w_T_ci, int start, int e
 }
 
 
-void VizPoseGraph::publishOdometry( const vector<Matrix4d>& w_T_ci )
+void VizPoseGraph::publishOdometry( const vector<Matrix4d>& w_T_ci ) const
 {
     nav_msgs::Odometry odom;
     int idx_last = w_T_ci.size()-1;
@@ -323,14 +323,14 @@ void VizPoseGraph::publishOdometry( const vector<Matrix4d>& w_T_ci )
 }
 
 
-void VizPoseGraph::publishPath( const nav_msgs::Path& path )
+void VizPoseGraph::publishPath( const nav_msgs::Path& path ) const
 {
     pub_path_opt.publish( path );
 }
 
 
 
-void VizPoseGraph::publishLastNEdges( int n )
+void VizPoseGraph::publishLastNEdges( int n ) const
 {
     int start, end;
     int len = manager->getEdgeLen();
@@ -363,7 +363,7 @@ void VizPoseGraph::publishLastNEdges( int n )
     }
 }
 
-void VizPoseGraph::publishSlamResidueVisual( int n )
+void VizPoseGraph::publishSlamResidueVisual( int n ) const
 {
     FalseColors fcolmap;
     int start, end;
@@ -429,5 +429,13 @@ void VizPoseGraph::publishSlamResidueVisual( int n )
         pub_pgraph.publish( marker );
     }
 
+
+}
+
+
+void VizPoseGraph::publishNodesAsLineStrip__ColorByID( const vector<Matrix4d>& jmb, const vector<int>& ids, const string& ns ) const
+{
+    ROS_ERROR( "[VizPoseGraph::publishNodesAsLineStrip__ColorByID] not implemented ");
+    exit(1);
 
 }
