@@ -14,6 +14,8 @@ loopclosure_edges_goodness.reserve(10000);
 loopclosure_p_T_c.reserve(10000);
 
 current_kidnap_status = false;
+worlds_handle_raw_ptr = new Worlds();
+
 }
 
 
@@ -63,7 +65,7 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 
         // signal world0 start
         if( node_pose.size() == 1 ) {
-            worlds_handle.world_starts( msg->header.stamp );
+            worlds_handle_raw_ptr->world_starts( msg->header.stamp );
         }
 
     }
@@ -134,9 +136,11 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     // assert( op_mode == 30 );
     string description = msg->description;
 
+    #if 0
     cout <<  TermColor::iYELLOW() << "[NodeDataManager::loopclosure_pose_callback]";
     cout << "t_a=" << t_a << "   t_b=" << t_b << "   wt=" << msg->weight;
     cout << "  description=" << msg->description << TermColor::RESET() << endl;
+    #endif
 
 
     // retrive rel-pose  p_T_c
@@ -294,6 +298,16 @@ const Matrix4d& NodeDataManager::getNodePose( int i ) const
 
     assert( ( i>=0 && i< node_pose.size() ) );
     return node_pose[i];
+}
+
+
+bool NodeDataManager::nodePoseExists( int i) const
+{
+    std::lock_guard<std::mutex> lk(node_mutex);
+    if( ( i>=0 && i< node_pose.size() ) )
+        return true;
+    return false;
+
 }
 
 bool NodeDataManager::getNodeCov( int i, Matrix<double,6,6>& cov ) const
@@ -661,7 +675,7 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
         mark_as_kidnapped( rcvd_header->stamp );
 
         // signal the world ended
-        worlds_handle.world_ends( rcvd_header->stamp );
+        worlds_handle_raw_ptr->world_ends( rcvd_header->stamp );
         return;
 
 
@@ -672,7 +686,7 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
         mark_as_unkidnapped( rcvd_header->stamp );
 
         // signal start of a new world
-        worlds_handle.world_starts( rcvd_header->stamp );
+        worlds_handle_raw_ptr->world_starts( rcvd_header->stamp );
         return;
     }
 

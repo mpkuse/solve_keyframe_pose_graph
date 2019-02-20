@@ -84,6 +84,7 @@ public:
     int getNodeLen() const;
     bool getNodePose( int i, Matrix4d& w_T_cam ) const; // TODO removal
     const Matrix4d& getNodePose( int i ) const;
+    bool nodePoseExists( int i) const;
     bool getNodeCov( int i, Matrix<double,6,6>& cov ) const ; //TODO removal
     const Matrix<double,6,6>& getNodeCov( int i ) const;
     bool getNodeTimestamp( int i, ros::Time& stamp ) const;
@@ -151,7 +152,7 @@ public:
 
     int nodeidx_of_world_i_started( int i );
     int nodeidx_of_world_i_ended( int i );
-    int n_worlds();
+    int n_worlds() ;
 
     // Give me a timestamp and I will tell you which world co-ordinate system
     // this time is.
@@ -160,9 +161,11 @@ public:
     int which_world_is_this( const ros::Time _t ) const ;
     // int which_world_is_this( int i ); //given the node idx, gets the which_world_is_this.
 
+    // Worlds worlds_handle; //< To keep track of co-ordinates transform matrix between the worlds
+    Worlds * getWorldsPtr() { return worlds_handle_raw_ptr; }
+    const Worlds * getWorldsConstPtr() const { return (const Worlds*) worlds_handle_raw_ptr; }
+    // int worlds__n_worlds() const { return worlds_handle.n_worlds(); }
 
-
-    Worlds worlds_handle; //< To keep track of co-ordinates transform matrix between the worlds
 
 private:
     mutable std::mutex mutex_kidnap;
@@ -175,6 +178,7 @@ private:
     void mark_as_unkidnapped( const ros::Time _t );
 
 
+    Worlds * worlds_handle_raw_ptr=NULL;
 
 
 

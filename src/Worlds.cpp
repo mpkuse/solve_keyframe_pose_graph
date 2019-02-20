@@ -11,7 +11,7 @@ const Matrix4d Worlds::getPoseBetweenWorlds( int m, int n ) const
     // So, even if this doesn't exist in map, it can be infered.
 
     assert( rel_pose_between_worlds__wb_T_wa.count( make_pair(m,n) ) > 0 );
-    Matrix4d __tmp = rel_pose_between_worlds__wb_T_wa[ make_pair(m,n) ];
+    Matrix4d __tmp = rel_pose_between_worlds__wb_T_wa.at( make_pair(m,n) );
     return  __tmp;
 
 
@@ -139,6 +139,46 @@ const string Worlds::disjoint_set_status() const
 
 }
 
+void Worlds::disjoint_set_status_image(cv::Mat& im_disp, bool enable_bubbles, bool enable_text ) const
+{
+
+
+    im_disp = cv::Mat::zeros(cv::Size(400,80), CV_8UC3);
+
+    if( enable_bubbles ) {
+        int uu = n_worlds(); //disjoint_set.element_count();
+        // circles
+        for( int i=0 ; i<uu; i++ ) {
+            // World Colors
+            cv::Scalar color = FalseColors::randomColor( i );
+            // cout << color << endl;
+            cv::Point pt = cv::Point(20*i+15, 15);
+            cv::circle( im_disp, pt, 10, color, -1 );
+            cv::putText( im_disp, to_string(i), pt, cv::FONT_HERSHEY_SIMPLEX,
+                    0.4, cv::Scalar(255,255,255), 1.5 );
+
+
+            // Set Colors
+            int setId =  find_setID_of_world_i( i );
+            color = FalseColors::randomColor( setId );
+            pt = cv::Point(20*i+15, 45);
+            cv::circle( im_disp, pt, 10, color, -1 );
+            cv::putText( im_disp, to_string(setId), pt, cv::FONT_HERSHEY_SIMPLEX,
+                    0.4, cv::Scalar(255,255,255), 1.5 );
+
+
+        }
+    }
+
+    if( enable_text ) {
+        string info_msg = disjoint_set_status();
+        FalseColors::append_status_image( im_disp, info_msg );
+    }
+
+
+
+}
+
 void Worlds::print_summary() const
 {
     std::lock_guard<std::mutex> lk(mutex_world);
@@ -152,7 +192,7 @@ void Worlds::print_summary() const
         int n = it->first.second;
         Matrix4d m_T_n = it->second;
         cout << "\t\t" << r << ")" << m<< "_T_" << n << " = " << PoseManipUtils::prettyprintMatrix4d( m_T_n );
-        cout << " info=" << rel_pose_between_worlds__wb_T_wa___info_string[ it->first ] ;
+        cout << " info=" << rel_pose_between_worlds__wb_T_wa___info_string.at( it->first ) ;
         cout << endl;
 
     }

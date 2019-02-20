@@ -1,6 +1,20 @@
 // Testing the implementations of disjoint sets
 
-#if 1
+
+#include <iostream>
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+using namespace Eigen;
+#include "utils/FalseColors.h"
+
+int main()
+{
+    for( int i=0 ; i<10; i++)
+        cout << FalseColors::randomColor( i ) << endl;
+
+}
+#if 0
 #include <iostream>
 
 #include "utils/DisjointSet.h"

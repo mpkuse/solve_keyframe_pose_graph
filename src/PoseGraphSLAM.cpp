@@ -520,6 +520,24 @@ void PoseGraphSLAM::new_optimize6DOF()
     // transform between world-2 and world-4. Look at class Worlds that stores the info on relative poses of 2 worlds
 
 
+    //////////////////////// Summary of the Loop //////////////////////////////////
+    // -1-
+    // Are there any new nodes ?
+    //      if yes than for each new node
+    //            a) add new optimization variables
+    //            b) add odometry edges to the optimization problem. Taking care to not add odom edges between 2 different co-ordinate systems
+    //
+    // -2-
+    // Are there any new loopedges,for each new edge e=(a,b) \in E, ?
+    //      if yes then
+    //              case-a: world_of_a == world_of_b  add loop edges to the optimization problem
+    //              case-b: world_of_a != world_of_b
+    //                  i) compute relative poses between the worlds. If you already know it, then no action.
+    //
+    // -3-
+    // Ceres::Solve
+    //////////////////////// END Summary of the Loop //////////////////////////////////
+
     while( new_optimize6DOF_isEnabled )
     {
         cout << "---\n";
@@ -534,6 +552,7 @@ void PoseGraphSLAM::new_optimize6DOF()
 
 
         //-------------------
+        // -1-
         // Are there any new nodes ?
         //      if yes than a) add new optimization variables b) add odometry edges to the optimization problem
         //-------------------
@@ -699,6 +718,7 @@ void PoseGraphSLAM::new_optimize6DOF()
 
 
         //-------------------
+        // -2-
         // Are there any new loopedges ?
         //      if yes than add loop edges to the optimization problem
         //-------------------
@@ -716,12 +736,14 @@ void PoseGraphSLAM::new_optimize6DOF()
                 double weight = manager->getEdgeWeight(e);
                 auto paur = manager->getEdgeIdxInfo(e);
 
-                // Print the info of the edge as it is.
+                #if 1
+                // Print ordinary info of the edge as it is.
                 cout << "\t---\n\t##loopedge e=" << e << "\t";
                 cout << "(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(4) << weight;
                 cout << "\n\tdescription_string=" << manager->getEdgeDescriptionString(e) << "\n";
                 cout << "\tbTa(observed)="  << PoseManipUtils::prettyprintMatrix4d(bTa) << endl;;
 
+                // Print world info of the edge
                 int __a_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) );
                 int __b_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) );
                 if( __b_world_is != __a_world_is ) cout << "\t\t>>>>>><<<<<<==========\n";
@@ -730,9 +752,10 @@ void PoseGraphSLAM::new_optimize6DOF()
                      << "\t"
                      << "b's world is: " <<  __b_world_is;
                 cout << TermColor::RESET() << endl;;
-                cout << "world#" << __a_world_is << " is in setID=" << manager->worlds_handle.find_setID_of_world_i( __a_world_is ) << "\t\t" ;
-                cout << "world#" << __b_world_is << " is in setID=" << manager->worlds_handle.find_setID_of_world_i( __b_world_is ) << "\n" ;
-                manager->worlds_handle.print_summary();
+                cout << "world#" << __a_world_is << " is in setID=" << manager->getWorldsPtr()->find_setID_of_world_i( __a_world_is ) << "\t\t" ;
+                cout << "world#" << __b_world_is << " is in setID=" << manager->getWorldsPtr()->find_setID_of_world_i( __b_world_is ) << "\n" ;
+                manager->getWorldsPtr()->print_summary();
+                #endif
 
 
 
@@ -753,16 +776,16 @@ void PoseGraphSLAM::new_optimize6DOF()
                         cout << "The two edge-end-pts are in different worlds.\n";
 
 
-                        if( manager->worlds_handle.is_exist(world_of_b,world_of_a) )
+                        if( manager->getWorldsPtr()->is_exist(world_of_b,world_of_a) )
                         {
-                            auto rel_wb_T_wa = manager->worlds_handle.getPoseBetweenWorlds( world_of_b, world_of_a );
+                            auto rel_wb_T_wa = manager->getWorldsPtr()->getPoseBetweenWorlds( world_of_b, world_of_a );
                             cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
                             cout << "[TODO] likely no action is needed as the initial guesses must be in order by now\n";
                             cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
                         }
                         else {
                             cout << "CURRENT STATUS OF WORLDS (disjoint set) before:\n";
-                            manager->worlds_handle.print_summary();
+                            manager->getWorldsPtr()->print_summary();
                             cout << "....\n";
                             cout << "I DONOT know the relative transforms between the 2 world, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
 
@@ -779,7 +802,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                             cout << "setting var rel_pose_between_worlds__wb_T_wa[ " << world_of_b << "," << world_of_a << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
 
                             string info_string = "this pose computed from edge "+ std::to_string(_a) + " <--> " + std::to_string(_b);
-                            manager->worlds_handle.setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa,  info_string );
+                            manager->getWorldsPtr()->setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa,  info_string );
 
 
                             // set all earlier node poses of [world-a-start, _a]
@@ -789,8 +812,13 @@ void PoseGraphSLAM::new_optimize6DOF()
                             cout << "world_of_b=" << world_of_b << "\tworld_of_b starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_b) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_b) << endl;
 
                             cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
-                            manager->worlds_handle.print_summary();
+                            manager->getWorldsPtr()->print_summary();
                             cout << "....\n";
+
+
+
+
+
 
 
                         }
@@ -924,7 +952,7 @@ void PoseGraphSLAM::new_optimize6DOF()
     cout << TermColor::RESET() << endl;
 
     //// Relative transforms between worlds
-    manager->worlds_handle.print_summary();
+    manager->getWorldsPtr()->print_summary();
 
 
     //// When was I kidnaped

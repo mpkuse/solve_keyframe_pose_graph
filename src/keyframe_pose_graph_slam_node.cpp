@@ -176,24 +176,73 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
 void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
 {
     ros::Rate loop_rate(1);
+
+    #if 1
     while( ros::ok() )
     {
-        string info_msg = manager->worlds_handle.disjoint_set_status();
-        cv::Mat im_disp = cv::Mat::zeros(cv::Size(300,50), CV_8UC3);
+        cv::Mat im_disp;
+        manager->getWorldsConstPtr()->disjoint_set_status_image(im_disp);
+        cv::imshow( "win" , im_disp );
+        cv::waitKey(30);
+
+        loop_rate.sleep();
+    }
+    #else
+    while( ros::ok() )
+    {
+        string info_msg = manager->getWorldsConstPtr()->disjoint_set_status();
+        cv::Mat im_disp = cv::Mat::zeros(cv::Size(300,80), CV_8UC3);
+
+        // cout << "[info_nsg]" << info_msg << endl;
+
+
         FalseColors::append_status_image( im_disp, info_msg );
+
+        #if 1
+        int uu = manager->getWorldsConstPtr()->n_worlds() ;
+        // int uu = manager->n_worlds();
+        cout << uu << endl;
+
+        // circles
+        for( int i=0 ; i<uu; i++ ) {
+            // World Colors
+            cv::Scalar color = FalseColors::randomColor( i );
+            cout << color << endl;
+            cv::Point pt = cv::Point(20*i+15, 15);
+            cv::circle( im_disp, pt, 10, color, -1 );
+            cv::putText( im_disp, to_string(i), pt, cv::FONT_HERSHEY_SIMPLEX,
+                    0.4, cv::Scalar(255,255,255), 1.5 );
+
+
+
+            // Set Colors
+            cout << " find sedID of the world#" << i << endl;
+            int setId =  manager->getWorldsConstPtr()->find_setID_of_world_i( i );
+            cerr <<  "setID=" << setId << "  ";
+            color = FalseColors::randomColor( setId );
+            cerr << color << endl;
+            pt = cv::Point(20*i+15, 45);
+            cv::circle( im_disp, pt, 10, color, -1 );
+            cv::putText( im_disp, to_string(setId), pt, cv::FONT_HERSHEY_SIMPLEX,
+                    0.4, cv::Scalar(255,255,255), 1.5 );
+
+
+        }
+        #endif
 
         cv::imshow( "win" , im_disp );
         cv::waitKey(30);
 
         loop_rate.sleep();
     }
+    #endif
 }
 
 
 // plots the corrected trajectories, different worlds will have different colored lines
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
 {
-    return;
+
     ros::Rate loop_rate(20);
     map<int, vector<Matrix4d> > jmb;
     while( ros::ok() )
@@ -208,56 +257,102 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         //clear map
         jmb.clear();
 
-        cout << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
-        #if 0
+        cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
+
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
-            cout << "slam->solvedUntil=" << slam->solvedUntil() << endl;
+            int ____solvedUntil = slam->solvedUntil();
+            cerr << "\ti=" << i << " slam->solvedUntil=" << ____solvedUntil << endl;
             // i>=0 and i<solvedUntil()
-            if( i>=0 && i< slam->solvedUntil() ) {
+            if( i>=0 && i< ____solvedUntil ) {
                 Matrix4d w_T_c_optimized, w_T_c;
-                cout << slam->getNodePose(i, w_T_c_optimized ) << " ";
-                cout << manager->getNodePose(i, w_T_c ) << " \n";
-                cout << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c_optimized ) << endl;
 
-                int world_id = manager->which_world_is_this( i );
-                cout << "world_id=" << world_id << endl;
+                int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+                cerr << "world_id=" << world_id << "   ";
 
-                if( jmb.count( world_id ) > 0 )
-                    jmb[ world_id ].push_back( w_T_c_optimized );
-                else
+                cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
+                cerr << "manager->nodePoseExists(" << i << ") " << manager->nodePoseExists(i ) << " \n";
+
+
+
+                if( slam->nodePoseExists(i) ) {
+                    w_T_c = slam->getNodePose( i );
+                    cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                } else {
+                    if( manager->nodePoseExists(i )  ) {
+                        w_T_c = manager->getNodePose( i );
+                        cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                    }
+                }
+
+
+                if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
+
+                jmb[ world_id ].push_back( w_T_c );
+
             }
 
 
-            // i>solvedUntil() < manager->getNodeLen()
-            if( i>=slam->solvedUntil() && manager->getNodeLen() ) {
-                cout << "hu\n";
+            // i>solvedUntil() < manager->getNodeLen() only odometry available here.
+            /*
+            if( i>=(____solvedUntil) && manager->getNodeLen() ) {
+                cerr << "hu\n";
+                int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+                cerr << "world_id=" << world_id << endl;
+
+                Matrix4d w_TM_i;
+                if(____solvedUntil > 1 ) {
+                    cerr << "A";
+                    Matrix4d w_T_last = slam->getNodePose( slam->solvedUntil()-2 );
+                    Matrix4d last_M_i = manager->getNodePose( slam->solvedUntil()-2 ).inverse() * manager->getNodePose( i );
+                    w_TM_i = w_T_last * last_M_i;
+                } else {
+                    cerr << "B";
+                    w_TM_i = manager->getNodePose( i );
+                }
+
+                cerr << "X    " << PoseManipUtils::prettyprintMatrix4d( w_TM_i);
+
+                if( jmb.count( world_id ) ==  0 )
+                    jmb[ world_id ] = vector<Matrix4d>();
+
+                jmb[ world_id ].push_back( w_TM_i );
             }
+            */
 
         }
-        #endif
+
 
 
         cout << "[opt_traj_publisher_colored_by_world]publish\n";
         // publish jmb
-        #if 0
+        // #if 0
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
             string ns = "world#"+to_string( it->first );
+            cerr << "\nns=" << ns << " size=" << it->second.size() << endl;
+            cerr << "1\n";
+            float c_r=0., c_g=0., c_b=0.;
+            cerr << "1\n";
+            if( it->first >= 0 ) {
+                cv::Scalar color = FalseColors::randomColor( it->first );
+                c_r = color[2]/255.;
+                c_g = color[1]/255.;
+                c_b = color[0]/255.;
+            }
+            cerr << "1\n";
 
-            float c_r, c_g, c_b;
-            cv::Scalar color = FalseColors::randomColor( it->first );
-            c_r = color[0]/255.;
-            c_g = color[1]/255.;
-            c_b = color[2]/255.;
+            cout << (it->second)[0] << endl;
 
-
+            cerr << "publishNodesAsLineStrip\n";
             viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+            cerr << "Done\n";
         }
-        #endif
+        // #endif
 
 
         // book keeping
+        cerr << "\nSLEEP\n";
         loop_rate.sleep();
     }
 }

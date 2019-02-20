@@ -18,11 +18,18 @@
 #include <atomic>
 #include <chrono>
 
+//opencv
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/calib3d.hpp>
+#include <cv_bridge/cv_bridge.h>
+
 #include "utils/PoseManipUtils.h"
 #include "utils/TermColor.h"
 #include "utils/ElapsedTime.h"
 
 #include "utils/DisjointSet.h"
+#include "utils/FalseColors.h"
 
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
@@ -43,6 +50,7 @@ public:
 
     void print_summary() const;
     const string disjoint_set_status() const ;
+    void disjoint_set_status_image(cv::Mat& outIm, bool enable_bubbles=true, bool enable_text=true ) const;
 
 
 
