@@ -68,16 +68,58 @@ void periodic_print_len( const NodeDataManager * manager )
 }
 
 
-void periodic_publish( const VizPoseGraph * viz )
+// #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
+#define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 12 //< color the line with setID( worldID )
+
+
+void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph * viz )
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(5);
+
+    map<int, vector<Matrix4d> > jmb;
     while( ros::ok() )
     {
-        // cout << "publishLastNNodes\n";
-        // viz->publishLastNNodes(10);
-        // viz->publishLastNEdges(10);
-        viz->publishSlamResidueVisual( 10 );
+        if( manager->getNodeLen() == 0 ) {
+            loop_rate.sleep();
+            continue;
+        }
+
+        jmb.clear();
+        for( int i=0 ; i<manager->getNodeLen() ; i++ )
+        {
+            int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+            if( manager->nodePoseExists(i )  ) {
+                auto w_T_c = manager->getNodePose( i );
+                if( jmb.count( world_id ) ==  0 )
+                    jmb[ world_id ] = vector<Matrix4d>();
+
+                jmb[ world_id ].push_back( w_T_c );
+            }
+        }
+
+
+        for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+            string ns = "odom-world#"+to_string( it->first );
+
+            float c_r=0., c_g=0., c_b=0.;
+            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+            int rng = it->first; //color by world id WorldID
+            #endif
+
+            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+            int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+            #endif
+            if( rng >= 0 ) {
+                cv::Scalar color = FalseColors::randomColor( rng );
+                c_r = color[2]/255.;
+                c_g = color[1]/255.;
+                c_b = color[0]/255.;
+            }
+
+            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+        }
+
 
         loop_rate.sleep();
     }
@@ -240,6 +282,7 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
 
 
 // plots the corrected trajectories, different worlds will have different colored lines
+
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
 {
 
@@ -247,9 +290,9 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
     map<int, vector<Matrix4d> > jmb;
     while( ros::ok() )
     {
-        cout << "[opt_traj_publisher_colored_by_world]---\n";
+        // cout << "[opt_traj_publisher_colored_by_world]---\n";
         if( manager->getNodeLen() == 0 ) {
-            cout << "[opt_traj_publisher_colored_by_world]nothing to publish\n";
+            // cout << "[opt_traj_publisher_colored_by_world]nothing to publish\n";
             loop_rate.sleep();
             continue;
         }
@@ -257,31 +300,30 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         //clear map
         jmb.clear();
 
-        cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
-
+        // cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
+        int latest_pose_worldid = -1;
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int ____solvedUntil = slam->solvedUntil();
-            cerr << "\ti=" << i << " slam->solvedUntil=" << ____solvedUntil << endl;
+            // cerr << "\ti=" << i << " slam->solvedUntil=" << ____solvedUntil << endl;
             // i>=0 and i<solvedUntil()
             if( i>=0 && i< ____solvedUntil ) {
                 Matrix4d w_T_c_optimized, w_T_c;
 
                 int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
-                cerr << "world_id=" << world_id << "   ";
-
-                cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
-                cerr << "manager->nodePoseExists(" << i << ") " << manager->nodePoseExists(i ) << " \n";
-
+                // cerr << "world_id=" << world_id << "   ";
+                // cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
+                // cerr << "manager->nodePoseExists(" << i << ") " << manager->nodePoseExists(i ) << " \n";
 
 
+                // If the optimized pose exists use that else use the odometry pose
                 if( slam->nodePoseExists(i) ) {
                     w_T_c = slam->getNodePose( i );
-                    cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                    // cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
                 } else {
                     if( manager->nodePoseExists(i )  ) {
                         w_T_c = manager->getNodePose( i );
-                        cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                        // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
                     }
                 }
 
@@ -290,69 +332,89 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     jmb[ world_id ] = vector<Matrix4d>();
 
                 jmb[ world_id ].push_back( w_T_c );
+                latest_pose_worldid = world_id;
 
             }
 
 
             // i>solvedUntil() < manager->getNodeLen() only odometry available here.
-            /*
+
             if( i>=(____solvedUntil) && manager->getNodeLen() ) {
-                cerr << "hu\n";
+                // cerr << "hu\n";
                 int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
-                cerr << "world_id=" << world_id << endl;
+                // cerr << "world_id=" << world_id << endl;
 
                 Matrix4d w_TM_i;
                 if(____solvedUntil > 1 ) {
-                    cerr << "A";
+                    // cerr << "A";
                     Matrix4d w_T_last = slam->getNodePose( slam->solvedUntil()-2 );
                     Matrix4d last_M_i = manager->getNodePose( slam->solvedUntil()-2 ).inverse() * manager->getNodePose( i );
                     w_TM_i = w_T_last * last_M_i;
                 } else {
-                    cerr << "B";
+                    // cerr << "B";
                     w_TM_i = manager->getNodePose( i );
                 }
 
-                cerr << "X    " << PoseManipUtils::prettyprintMatrix4d( w_TM_i);
+                // cerr << "X    " << PoseManipUtils::prettyprintMatrix4d( w_TM_i);
 
                 if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
 
                 jmb[ world_id ].push_back( w_TM_i );
+                latest_pose_worldid = world_id;
             }
-            */
+
 
         }
 
 
 
-        cout << "[opt_traj_publisher_colored_by_world]publish\n";
+        // cout << "[opt_traj_publisher_colored_by_world]publish\n";
         // publish jmb
         // #if 0
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
             string ns = "world#"+to_string( it->first );
-            cerr << "\nns=" << ns << " size=" << it->second.size() << endl;
-            cerr << "1\n";
+
             float c_r=0., c_g=0., c_b=0.;
-            cerr << "1\n";
-            if( it->first >= 0 ) {
-                cv::Scalar color = FalseColors::randomColor( it->first );
+            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+            int rng = it->first; //color by world id WorldID
+            #endif
+
+            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+            int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+            #endif
+            if( rng >= 0 ) {
+                cv::Scalar color = FalseColors::randomColor( rng );
                 c_r = color[2]/255.;
                 c_g = color[1]/255.;
                 c_b = color[0]/255.;
             }
-            cerr << "1\n";
 
-            cout << (it->second)[0] << endl;
-
-            cerr << "publishNodesAsLineStrip\n";
             viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
-            cerr << "Done\n";
         }
         // #endif
 
+        // Publish Camera visual
+        Matrix4d wi_T_latest = *( jmb.at( latest_pose_worldid ).rbegin() );
+        float c_r=0., c_g=0., c_b=0.;
+        #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+        int rng = latest_pose_worldid;
+        #endif
+
+        #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+        int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
+        #endif
+        if( rng >= 0 ) {
+            cv::Scalar color = FalseColors::randomColor( rng );
+            c_r = color[2]/255.;
+            c_g = color[1]/255.;
+            c_b = color[0]/255.;
+        }
+        viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b );
+
 
         // book keeping
-        cerr << "\nSLEEP\n";
+        // cerr << "\nSLEEP\n";
         loop_rate.sleep();
     }
 }
@@ -427,7 +489,7 @@ int main( int argc, char ** argv)
     std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
     // std::thread th4( periodic_publish, viz );
     std::thread th5( monitor_disjoint_set_datastructure, manager );
-    // std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz );
+    std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz );
 
 
 
@@ -448,7 +510,7 @@ int main( int argc, char ** argv)
     th3.join();
     // th4.join();
     th5.join();
-    // th6.join();
+    th6.join();
 
     th_slam.join();
 

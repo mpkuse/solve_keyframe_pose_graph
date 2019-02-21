@@ -58,9 +58,8 @@ public:
     void publishLastNEdges( int n ) const;
 
     void publishSlamResidueVisual( int n ) const;
+    void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b );
 
-    // for kidnap
-    void publishNodesAsLineStrip__ColorByID( const vector<Matrix4d>& jmb, const vector<int>& ids, const string& ns ) const;
 
 private:
     const NodeDataManager * manager=NULL;
@@ -69,5 +68,5 @@ private:
     // Publish Marker
     ros::Publisher pub_pgraph; //< Marker
     ros::Publisher pub_path_opt; //< Path, TODO: Removal
-    ros::Publisher pub_odometry_opt; // nav_msgs::Odometry
+    ros::Publisher pub_odometry_opt; // nav_msgs::Odometry //TODO Removal
 };

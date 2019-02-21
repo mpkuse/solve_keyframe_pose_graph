@@ -497,6 +497,7 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
 #define __PoseGraphSLAM_new_optimize6DOF_odom( msg ) msg;
 // #define __PoseGraphSLAM_new_optimize6DOF_odom( msg ) ;
 
+#define __PoseGraphSLAM_new_optimize6DOF_worldcorrection_code 1 // have this to 1 to enable the code, 0 to disable the code
 
 void PoseGraphSLAM::new_optimize6DOF()
 {
@@ -525,14 +526,14 @@ void PoseGraphSLAM::new_optimize6DOF()
     // Are there any new nodes ?
     //      if yes than for each new node
     //            a) add new optimization variables
-    //            b) add odometry edges to the optimization problem. Taking care to not add odom edges between 2 different co-ordinate systems
+    //            b) add odometry edges to the optimization problem. Taking care to not add odom edges between 2 different co-ordinate systems (different worlds)
     //
     // -2-
     // Are there any new loopedges,for each new edge e=(a,b) \in E, ?
     //      if yes then
     //              case-a: world_of_a == world_of_b  add loop edges to the optimization problem
     //              case-b: world_of_a != world_of_b
-    //                  i) compute relative poses between the worlds. If you already know it, then no action.
+    //                  i) If you already NOT know it, compute relative poses between the worlds. If you know it no action needed
     //
     // -3-
     // Ceres::Solve
@@ -549,6 +550,21 @@ void PoseGraphSLAM::new_optimize6DOF()
         cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << endl;
 
 
+        // if we got kidnaped, mark the previous world's opt variables as constants
+        if( manager->curr_kidnap_status() && marked_previous_nodes_opt_variables_as_constant == false )
+        {
+            cout << "I think I am kidnapped, mark the previous world's opt variables as constant\n";
+            int __start = manager->nodeidx_of_world_i_started( manager->n_worlds() - 1 );
+            int __end = manager->nodeidx_of_world_i_ended( manager->n_worlds() - 1 );
+            for( int q = __start ; q<=__end ; q++  ) {
+                cout << "Mark node#"<< q << " as constant\n";
+                problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(q) );
+                problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(q)  );
+            }
+            marked_previous_nodes_opt_variables_as_constant = true;
+        }
+        if( !manager->curr_kidnap_status() )
+            marked_previous_nodes_opt_variables_as_constant = false;
 
 
         //-------------------
@@ -574,7 +590,6 @@ void PoseGraphSLAM::new_optimize6DOF()
             cout << "loop from u=" << prev_node_len <<" ; u<" << node_len << " ; u++\n";
             )
             for( int u=prev_node_len ; u<node_len ; u++ ) {
-                // int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
                 __PoseGraphSLAM_new_optimize6DOF_odom_debug( cerr << "u=" << u << " " ; )
                 if( u==0 ) { //0th node.
                     allocate_and_append_new_opt_variable_withpose( manager->getNodePose(u) );
@@ -608,25 +623,33 @@ void PoseGraphSLAM::new_optimize6DOF()
                     allocate_and_append_new_opt_variable_withpose( w_TM_u );
 
 
-                    #if 0
+                    #if __PoseGraphSLAM_new_optimize6DOF_worldcorrection_code
                     // This is the new code added for handling kidnaps #corrected-node-pose-IPSUMLOREM
-                    if( world_of_u == 0 ) {
-                        ;
-                    }
-                    else {
-                        cout << "world_of_u" << u << " = " << world_of_u;
-                        cout << ( (manager->worlds_handle.is_exist(0, world_of_u) ) ? "Y":"N" ) << ", ";
-
-                        if( manager->worlds_handle.is_exist(0, world_of_u) ) {
-                            cout << "\nI Can initialize the pose in world0\n";
-                            auto _tmo = manager->worlds_handle.getPoseBetweenWorlds(0,world_of_u) * w_TM_u;
-                            // this->update_opt_variable_with( u, _tmo );
-
+                    cout << TermColor::iMAGENTA() << "[__PoseGraphSLAM_new_optimize6DOF_worldcorrection_code]\n";
+                    int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
+                    int setID_of__world_of_u = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u );
+                    cout << "world_of_u=" << world_of_u << "\t\tsetID_of__world_of_u=" << setID_of__world_of_u << endl;
+                    if( world_of_u >= 0 && setID_of__world_of_u >= 0 ) {
+                        if( world_of_u == setID_of__world_of_u ) {
+                            ;
                         }
                         else {
-                            cout << "\nthis u is not in world0, I do not know its world's pose wrt to world0 yet.\n";
+                            cout << "Does the pose between world#"<< setID_of__world_of_u << " and world#" << world_of_u << " exists? ";
+                            cout << ( (manager->getWorldsConstPtr()->is_exist(setID_of__world_of_u, world_of_u) ) ? "YES":"NO" ) << ", ";
+
+                            if( manager->getWorldsConstPtr()->is_exist(setID_of__world_of_u, world_of_u) ) {
+                                cout << "\nI Can initialize this pose in world#" << setID_of__world_of_u << "\n";
+                                auto _tmo = manager->getWorldsConstPtr()->getPoseBetweenWorlds(setID_of__world_of_u,world_of_u) * w_TM_u;
+                                cout << "w" << setID_of__world_of_u<<  "_T_w" << world_of_u << "=" << PoseManipUtils::prettyprintMatrix4d( manager->getWorldsConstPtr()->getPoseBetweenWorlds(setID_of__world_of_u,world_of_u)  );
+                                this->update_opt_variable_with( u, _tmo );
+
+                            }
+                            else {
+                                cout << "\nthis u is in its own world. no shifying is needed\n";
+                            }
                         }
                     }
+                    cout << "\n[/__PoseGraphSLAM_new_optimize6DOF_worldcorrection_code]" << TermColor::RESET() << endl;
                     #endif
 
 
@@ -638,8 +661,10 @@ void PoseGraphSLAM::new_optimize6DOF()
                 problem.SetParameterization( get_raw_ptr_to_opt_variable_q(u),  eigenquaternion_parameterization );
                 problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(u), 3 );
                 if( u==0 ) {
-                    problem.SetParameterBlockConstant(  opt_quat[0] );
-                    problem.SetParameterBlockConstant(  opt_t[0]  );
+                    // problem.SetParameterBlockConstant(  opt_quat[0] );
+                    // problem.SetParameterBlockConstant(  opt_t[0]  );
+                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(0) );
+                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(0)  );
                 }
             }
             cout << "\n";
@@ -754,7 +779,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                 cout << TermColor::RESET() << endl;;
                 cout << "world#" << __a_world_is << " is in setID=" << manager->getWorldsPtr()->find_setID_of_world_i( __a_world_is ) << "\t\t" ;
                 cout << "world#" << __b_world_is << " is in setID=" << manager->getWorldsPtr()->find_setID_of_world_i( __b_world_is ) << "\n" ;
-                manager->getWorldsPtr()->print_summary();
+                // manager->getWorldsPtr()->print_summary();
                 #endif
 
 
@@ -780,7 +805,7 @@ void PoseGraphSLAM::new_optimize6DOF()
                         {
                             auto rel_wb_T_wa = manager->getWorldsPtr()->getPoseBetweenWorlds( world_of_b, world_of_a );
                             cout << "I already know the relative transforms between the 2 worlds, wa= "<< world_of_a << " ; wb=" << world_of_b << " \n";
-                            cout << "[TODO] likely no action is needed as the initial guesses must be in order by now\n";
+                            cout << "[TODO] no action is needed as the initial guesses must be in order by now\n";
                             cout << "rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << endl;
                         }
                         else {
@@ -805,11 +830,26 @@ void PoseGraphSLAM::new_optimize6DOF()
                             manager->getWorldsPtr()->setPoseBetweenWorlds( world_of_b, world_of_a, wb_T_wa,  info_string );
 
 
-                            // set all earlier node poses of [world-a-start, _a]
+                            // set all earlier node poses of [world-a-start, world-a-ends]. Reinitialize the optimization variable.
+                            // Those comptimization variables will be in co-ordinate system of world-a.
                             cout << TermColor::RESET() << TermColor::BLUE();
                             cout << "[TODO] Set all earlier node poses (initial gueses) of [world-a-start, world_of_a]\n";
                             cout << "world_of_a=" << world_of_a << "\tworld_of_a starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_a) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_a) << endl;
                             cout << "world_of_b=" << world_of_b << "\tworld_of_b starts at nodeidx=" << manager->nodeidx_of_world_i_started(world_of_b) << "\tuntil nodeidx=" << manager->nodeidx_of_world_i_ended(world_of_b) << endl;
+
+                            {
+                                int __start = manager->nodeidx_of_world_i_started(world_of_a);
+                                int __end = manager->nodeidx_of_world_i_ended(world_of_a);
+                                for( int q=__start ; q<=__end ; q++ )
+                                {
+                                    auto wa_T_q = this->getNodePose( q ); // this is wa_T_q
+                                    auto __tmo =  wb_T_wa * wa_T_q;
+                                    cout << "new_pose = w" << world_of_b << "__T__w" << world_of_a << " x w" << world_of_a << "__T__" << q << endl;
+                                    this->update_opt_variable_with( q, __tmo );
+
+
+                                }
+                            }
 
                             cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
                             manager->getWorldsPtr()->print_summary();

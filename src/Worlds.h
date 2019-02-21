@@ -29,6 +29,7 @@
 #include "utils/ElapsedTime.h"
 
 #include "utils/DisjointSet.h"
+#include "utils/MyDirectionalGraph.h"
 #include "utils/FalseColors.h"
 
 #include "nlohmann/json.hpp"
@@ -43,10 +44,15 @@ class Worlds
 public:
     Worlds() {}
 
+    // m and n are worldIDs. A rel pose between two world will exist if they are in same set.
     const Matrix4d getPoseBetweenWorlds( int m, int n ) const ;
+
     bool setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const string info_string );
-    bool is_exist( int m, int n ) const ;
     void getAllKeys( vector<std::pair<int,int> >& all_keys ) const ;
+
+    // m and n are worldIDs. A rel pose between two world will exist if they are in same set.
+    // this will return true for (n,m) as well.
+    bool is_exist( int m, int n ) const ;
 
     void print_summary() const;
     const string disjoint_set_status() const ;
@@ -62,6 +68,8 @@ public:
     // Set related (query from disjoiunt set data-structure)
     int find_setID_of_world_i( int i ) const; //< returns the setid of world i
     int n_worlds() const; //< number of worlds
+    int n_worlds__nolock() const; //< number of worlds.
+
     int n_sets() const;   //< number of sets
 
 

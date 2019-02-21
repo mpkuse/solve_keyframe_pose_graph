@@ -223,7 +223,7 @@ public:
     /**
     @brief Returns true if element x exists. False other wise
     */
-    bool exists( int x ) {
+    bool exists( int x ) const {
         if( m_elements.count( x ) == 0 ) return false;
         else return true;
     }

@@ -433,9 +433,15 @@ void VizPoseGraph::publishSlamResidueVisual( int n ) const
 }
 
 
-void VizPoseGraph::publishNodesAsLineStrip__ColorByID( const vector<Matrix4d>& jmb, const vector<int>& ids, const string& ns ) const
-{
-    ROS_ERROR( "[VizPoseGraph::publishNodesAsLineStrip__ColorByID] not implemented ");
-    exit(1);
 
+void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b )
+{
+    visualization_msgs::Marker marker2 ;
+    RosMarkerUtils::init_camera_marker( marker2, 10 );
+    RosMarkerUtils::setpose_to_marker( wTc, marker2 );
+    RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
+    marker2.scale.x = 0.02;
+    marker2.id = 0;
+    marker2.ns = ns+string("_cam_visual");
+    pub_pgraph.publish( marker2 );
 }
