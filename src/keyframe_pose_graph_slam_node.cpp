@@ -68,9 +68,6 @@ void periodic_print_len( const NodeDataManager * manager )
 }
 
 
-// #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
-#define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 12 //< color the line with setID( worldID )
-
 
 void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph * viz )
 {
@@ -103,13 +100,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
             string ns = "odom-world#"+to_string( it->first );
 
             float c_r=0., c_g=0., c_b=0.;
-            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
             int rng = it->first; //color by world id WorldID
-            #endif
-
-            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
-            int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
-            #endif
             if( rng >= 0 ) {
                 cv::Scalar color = FalseColors::randomColor( rng );
                 c_r = color[2]/255.;
@@ -117,7 +108,13 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
                 c_b = color[0]/255.;
             }
 
+            if( (it->second).size() > 10 ) {
+            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b,
+            10, 0.0, .7, 0.0, false );}
+            else {
             viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+            }
+
         }
 
 
@@ -282,6 +279,9 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
 
 
 // plots the corrected trajectories, different worlds will have different colored lines
+
+// #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
+#define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 12 //< color the line with setID( worldID )
 
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
 {
@@ -486,8 +486,8 @@ int main( int argc, char ** argv)
     viz->setOdometryPublisher( pub_odometry_opt );
 
     // setup manager publishers threads - adhoc
-    std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
-    // std::thread th4( periodic_publish, viz );
+    // std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
+    std::thread th4( periodic_publish_odoms, manager, viz );
     std::thread th5( monitor_disjoint_set_datastructure, manager );
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz );
 
@@ -507,8 +507,8 @@ int main( int argc, char ** argv)
 
     // th1.join();
     // th2.join();
-    th3.join();
-    // th4.join();
+    // th3.join();
+    th4.join();
     th5.join();
     th6.join();
 

@@ -173,6 +173,11 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
         int b = manager->getEdgeIdxInfo( i ).second;
         edgeinfo["a"] = a;
         edgeinfo["b"] = b;
+
+        edgeinfo["world_of_a"] = manager->which_world_is_this( manager->getNodeTimestamp(a) );
+        edgeinfo["world_of_b"] = manager->which_world_is_this( manager->getNodeTimestamp(b) );
+
+
         edgeinfo["weight"] = manager->getEdgeWeight(i);
         edgeinfo["description_string"] = manager->getEdgeDescriptionString(i);
 
@@ -567,6 +572,7 @@ void PoseGraphSLAM::new_optimize6DOF()
             marked_previous_nodes_opt_variables_as_constant = false;
 
 
+
         //-------------------
         // -1-
         // Are there any new nodes ?
@@ -660,11 +666,14 @@ void PoseGraphSLAM::new_optimize6DOF()
                 problem.AddParameterBlock( get_raw_ptr_to_opt_variable_q(u), 4 );
                 problem.SetParameterization( get_raw_ptr_to_opt_variable_q(u),  eigenquaternion_parameterization );
                 problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(u), 3 );
+                // int ____world_of_u =  manager->which_world_is_this( manager->getNodeTimestamp( u  ) );
+                // if( u==0 || u == manager->nodeidx_of_world_i_started( ____world_of_u ) ) {
                 if( u==0 ) {
-                    // problem.SetParameterBlockConstant(  opt_quat[0] );
-                    // problem.SetParameterBlockConstant(  opt_t[0]  );
-                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(0) );
-                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(0)  );
+                    // problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(0) );
+                    // problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(0)  );
+                    // cout << "make the 1st node in this world as constant. world=" << world_of_u << " u=" << u << endl;
+                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(u) );
+                    problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(u)  );
                 }
             }
             cout << "\n";
@@ -930,10 +939,14 @@ void PoseGraphSLAM::new_optimize6DOF()
             ElapsedTime timer; timer.tic();
             {
                 std::lock_guard<std::mutex> lk(mutex_opt_vars);
-            ceres::Solve( options, &problem, &summary );
-            solved_until = node_len;
+                ceres::Solve( options, &problem, &summary );
+
+                cout << "summary.termination_type = "<< (ceres::TerminationType::CONVERGENCE == summary.termination_type) << endl;
+                if( summary.termination_type == ceres::TerminationType::CONVERGENCE )
+                    solved_until = node_len;
             }
             // cout << summary.FullReport() << endl;
+
             cout << "Solve() took (milli-sec) : " << timer.toc_milli()  << endl;
             cout << summary.BriefReport() << endl;
             cout << TermColor::RESET() << endl;
