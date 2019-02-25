@@ -16,6 +16,9 @@ const Matrix4d Worlds::getPoseBetweenWorlds( int m, int n ) const
     return  __tmp;
     #endif
 
+    if( m==n )
+        return Matrix4d::Identity();
+
 
     if( is_exist(m,n) == false ) {
         cout << TermColor::RED() << "[Worlds::getPoseBetweenWorlds] you requested a relative pose between world#" << m << " and world#" << n << endl;
@@ -167,7 +170,6 @@ bool Worlds::setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const str
 // this will return true for (n,m) as well.
 bool Worlds::is_exist( int m, int n ) const
 {
-    std::lock_guard<std::mutex> lk(mutex_world);
 
     if( m<0 || n<0 )
         return false;
@@ -175,12 +177,15 @@ bool Worlds::is_exist( int m, int n ) const
     if( m==n )
         return true;
 
+    {
+    std::lock_guard<std::mutex> lk(mutex_world);
     int setid_of_m = disjoint_set.find_set( m ); //find_setID_of_world_i(m);
     int setid_of_n = disjoint_set.find_set( n ); //find_setID_of_world_i(n);
     if(  setid_of_m >= 0 && setid_of_n >=0 && setid_of_m == setid_of_n )
         return true;
     else
         return false;
+    }
 
     // TODO : removal of following code. old code.
     //
@@ -326,7 +331,7 @@ void Worlds::disjoint_set_status_image(cv::Mat& im_disp, bool enable_bubbles, bo
 
 }
 
-void Worlds::print_summary() const
+void Worlds::print_summary(int verbosity ) const
 {
     std::lock_guard<std::mutex> lk(mutex_world);
 
@@ -346,17 +351,19 @@ void Worlds::print_summary() const
     cout << "\t\t\\---- END Relative Poses Between Worlds----/\n";
 
     cout << "\n\t\t----Info from DisjointSet ----\n";
-    cout << "\t\telement count: " << disjoint_set.element_count() << std::endl;
-    cout << "\t\tset_count: " << disjoint_set.set_count() << endl;
+    cout << "\t\telement count: " << disjoint_set.element_count() ;
+    cout << "\tset_count: " << disjoint_set.set_count() << endl;
     for( int i=0 ; i<disjoint_set.element_count() ; i++ ) {
         cout << "\t\tworld#" << i << "  is in set=" << disjoint_set.find_set( i ) ;
         // cout << "  value=" << disjoint_set.value_of( i );
         cout << endl;
     }
 
+    if( verbosity > 0 ) {
     cout << "\n\t\t```all_ops performed:\n";
     cout << disjoint_set_debug;
     cout << "\n\t\t```\n";
+    }
 
     cout << "\t\t\\---- END Info from DisjointSet----/\n";
 

@@ -478,6 +478,9 @@ int main( int argc, char ** argv)
     slam->new_optimize6DOF_enable();
     std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    // std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
+
 
     // another class for viz.
     VizPoseGraph * viz = new VizPoseGraph( manager, slam );
@@ -504,6 +507,7 @@ int main( int argc, char ** argv)
     }
 
     slam->new_optimize6DOF_disable();
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
 
     // th1.join();
     // th2.join();

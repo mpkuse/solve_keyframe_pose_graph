@@ -71,6 +71,28 @@ public:
     void new_optimize6DOF_disable() { new_optimize6DOF_isEnabled=false; }
 
 
+    // This is the newer (Feb22 2019) implementation of `new_optimize6DOF`.
+    // It is an infinite loop and triggers the solve when there are new
+    // loop edges in the manager.
+    void reinit_ceres_problem_onnewloopedge_optimize6DOF();
+    void reinit_ceres_problem_onnewloopedge_optimize6DOF_enable() { reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled=true; }
+    void reinit_ceres_problem_onnewloopedge_optimize6DOF_disable() { reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled=false; }
+    int get_reinit_ceres_problem_onnewloopedge_optimize6DOF_status() { return reinit_ceres_problem_onnewloopedge_optimize6DOF_status; }
+
+private:
+    // private stuff for thread `reinit_ceres_problem_onnewloopedge_optimize6DOF`.
+    atomic<bool> reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled;
+
+    // -1 : Nothing happening
+    // 0  : Sleeping
+    // 1  : Setting up the problem
+    // 2  : ceres::Solve
+    atomic<int> reinit_ceres_problem_onnewloopedge_optimize6DOF_status;
+    void print_worlds_info( int verbosity );
+
+
+public:
+
     // Get the optimized pose at node i. This function is thread-safe
     const Matrix4d getNodePose( int i ) const; //< this gives the pose from the optimization variable
     bool nodePoseExists( int i ) const; //< returns if ith node pose exist
@@ -100,9 +122,18 @@ private:
     NodeDataManager * manager;
 
     // Optimization variables
+    #define ___OPT_AS_DOUBLE_STAR // comment this out for having optimization variables as vector<double*>.
     mutable std::mutex  mutex_opt_vars;
+
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    double * _opt_quat_ = NULL; //// stored as x,y,z,w
+    double * _opt_t_ = NULL;
+    int _opt_len_=0; ///< this is the current number of nodes. The actual lengths of opt_quat is 4 times this number and that of opt_t is 3 times this number.
+    #else
     vector<double*> opt_quat; // stored as x,y,z,w
     vector<double*> opt_t;
+    #endif
+
 
     // step-1: new i_opt_quat[5], new i_opt_t[5]
     // step-2: pose--> i_opt_quat, i_opt_t

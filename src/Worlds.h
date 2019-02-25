@@ -54,7 +54,7 @@ public:
     // this will return true for (n,m) as well.
     bool is_exist( int m, int n ) const ;
 
-    void print_summary() const;
+    void print_summary( int verbosity = 1) const;
     const string disjoint_set_status() const ;
     void disjoint_set_status_image(cv::Mat& outIm, bool enable_bubbles=true, bool enable_text=true ) const;
 
