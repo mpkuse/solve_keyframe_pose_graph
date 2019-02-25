@@ -15,9 +15,12 @@ PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager ): manager( _manager )
 
     #if defined(___OPT_AS_DOUBLE_STAR)
     // int n = 3000;
-    this->_opt_quat_ = new double [4*3000];
-    this->_opt_t_ = new double [3*3000];
+    this->_opt_quat_ = new double [4*30000];
+    this->_opt_t_ = new double [3*30000];
     this->_opt_len_ = 0;
+
+    this->_opt_switch_ = new double [5000]; //1 per loop edge
+    _opt_switch_len_ = 0;
     #endif
 
 }
@@ -1446,4 +1449,46 @@ void PoseGraphSLAM::print_worlds_info( int verbosity )
     }
     cout << endl;
     }
+}
+
+
+const int PoseGraphSLAM::n_opt_switch() const {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return _opt_switch_len_;
+    #else
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return opt_switch.size();
+    #endif
+}
+
+double * PoseGraphSLAM::get_raw_ptr_to_opt_switch( int i ) const {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    // return &_opt_switch_[i];
+    return (i>=0 && i<_opt_switch_len_)?&_opt_switch_[i]:NULL;
+    #else
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return opt_switch[i];
+    #endif
+}
+
+void PoseGraphSLAM::allocate_and_append_new_edge_switch_var() {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    double tmp[10];
+    tmp[0] = 0.99;
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        _opt_switch_[ _opt_switch_len_ ] = tmp[0];
+        _opt_switch_len_++;
+
+    }
+    #else
+    double *tmp = new double[1];
+    tmp[0] = 0.99;
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        opt_switch.push_back( tmp );
+    }
+    #endif
 }

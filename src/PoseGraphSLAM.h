@@ -142,28 +142,20 @@ private:
     const int n_opt_variables( ) const;
     double * get_raw_ptr_to_opt_variable_q( int i ) const;
     double * get_raw_ptr_to_opt_variable_t( int i ) const;
-
     bool update_opt_variable_with( int i, const Matrix4d& pose ); //< this will set opt_quad[i] and opt_t[i]. Will return false for invalid i
 
 
     // Optimization variables - Loop Edge Switching Constrainsts
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    double * _opt_switch_ = NULL;
+    int _opt_switch_len_ = 0;
+    #else
     vector<double*> opt_switch;
-    const int n_opt_switch() const {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        return opt_switch.size();
-    }
-    double * get_raw_ptr_to_opt_switch( int i ) const {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        return opt_switch[i];
-    }
-    void allocate_and_append_new_edge_switch_var() {
-        double *tmp = new double[1];
-        tmp[0] = 0.99;
-        {
-            std::lock_guard<std::mutex> lk(mutex_opt_vars);
-            opt_switch.push_back( tmp );
-        }
-    };
+    #endif
+
+    const int n_opt_switch() const;
+    double * get_raw_ptr_to_opt_switch( int i ) const;
+    void allocate_and_append_new_edge_switch_var() ;
 
     // atomic<int> solved_until;
     int solved_until;
