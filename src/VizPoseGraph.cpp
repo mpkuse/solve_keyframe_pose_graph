@@ -342,6 +342,14 @@ void VizPoseGraph::publishLastNEdges( int n ) const
 
     end = len;
 
+
+    // make a line marker
+    visualization_msgs::Marker marker;
+    RosMarkerUtils::init_line_marker( marker );
+    marker.id = 0;
+    marker.ns = "loop_closure_edges";
+    RosMarkerUtils::setcolor_to_marker( .5, .5, 0.1, marker );
+
     for( int i=start; i<end ; i++ )
     {
         auto paur = manager->getEdgeIdxInfo(i);
@@ -351,16 +359,11 @@ void VizPoseGraph::publishLastNEdges( int n ) const
         Vector3d w_t_prev = manager->getNodePose(idx_node_prev).col(3).head(3);
         Vector3d w_t_curr = manager->getNodePose(idx_node_curr).col(3).head(3);
 
+        RosMarkerUtils::add_points_to_marker( w_t_prev, marker, false );
+        RosMarkerUtils::add_points_to_marker( w_t_curr, marker, false );
 
-        // make a line marker
-        visualization_msgs::Marker marker;
-        RosMarkerUtils::init_line_marker( marker, w_t_prev, w_t_curr );
-        marker.id = i;
-        marker.ns = "loop_closure_edges";
-        RosMarkerUtils::setcolor_to_marker( 0.0, 1.0, 0.2, marker );
-
-        pub_pgraph.publish( marker );
     }
+    pub_pgraph.publish( marker );
 }
 
 void VizPoseGraph::publishSlamResidueVisual( int n ) const

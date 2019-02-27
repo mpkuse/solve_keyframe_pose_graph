@@ -86,7 +86,8 @@ private:
     // -1 : Nothing happening
     // 0  : Sleeping
     // 1  : Setting up the problem
-    // 2  : ceres::Solve
+    // 2  : ceres::Solve in progress
+    // 3  : ceres::Solve finished
     atomic<int> reinit_ceres_problem_onnewloopedge_optimize6DOF_status;
     void print_worlds_info( int verbosity );
 

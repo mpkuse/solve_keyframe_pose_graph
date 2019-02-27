@@ -6,7 +6,7 @@
 // }
 PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager ): manager( _manager )
 {
-    solved_until = 1;
+    solved_until = 0;
 
     new_optimize6DOF_disable();
     reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
@@ -220,102 +220,49 @@ bool PoseGraphSLAM::update_opt_variable_with( int i, const Matrix4d& pose ) //< 
 #endif
 }
 
-bool PoseGraphSLAM::saveAsJSON(const string base_path)
-{
-    json all_info;
-    const static IOFormat CSVFormat(FullPrecision, DontAlignCols, ",", ";");
-
-    all_info["meta_data"]["nNodes"] = nNodes();
 
 
-    for( int i=0 ; i<nNodes() ; i++ )
+const int PoseGraphSLAM::n_opt_switch() const {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return _opt_switch_len_;
+    #else
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return opt_switch.size();
+    #endif
+}
+
+double * PoseGraphSLAM::get_raw_ptr_to_opt_switch( int i ) const {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    // return &_opt_switch_[i];
+    return (i>=0 && i<_opt_switch_len_)?&_opt_switch_[i]:NULL;
+    #else
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    return opt_switch[i];
+    #endif
+}
+
+void PoseGraphSLAM::allocate_and_append_new_edge_switch_var() {
+    #if defined(___OPT_AS_DOUBLE_STAR)
+    double tmp[10];
+    tmp[0] = 0.99;
     {
-        json opt_var_i;
-
-        // Save Optimed pose
-        Matrix4d w_T_c_opt = getNodePose( i );
-        // getNodePose( i, w_T_c_opt );
-
-        std::stringstream ss;
-        ss << w_T_c_opt.format(CSVFormat);
-        opt_var_i["wTc_opt"] = ss.str();
-        opt_var_i["wTc_opt_prettyprint"] = PoseManipUtils::prettyprintMatrix4d( w_T_c_opt );
-
-
-        // save corresponding odom poses
-        Matrix4d w_T_c_odom;
-        manager->getNodePose( i, w_T_c_odom );
-        std::stringstream ss2;
-        ss2 << w_T_c_odom.format(CSVFormat);
-        opt_var_i["w_T_c_odom"] = ss2.str();
-        opt_var_i["w_T_c_odom_prettyprint"] = PoseManipUtils::prettyprintMatrix4d( w_T_c_odom );
-        opt_var_i["node_i"] = i;
-
-        all_info["PoseGraphSLAM_nodes"].push_back( opt_var_i );
-    }
-
-
-    // loop edges
-    for( int i=0 ; i<manager->getEdgeLen() ; i++ ) {
-        json edgeinfo;
-
-        // bTa with odometry
-        edgeinfo["getEdge_i"] = i;
-        int a = manager->getEdgeIdxInfo( i ).first;
-        int b = manager->getEdgeIdxInfo( i ).second;
-        edgeinfo["a"] = a;
-        edgeinfo["b"] = b;
-
-        edgeinfo["world_of_a"] = manager->which_world_is_this( manager->getNodeTimestamp(a) );
-        edgeinfo["world_of_b"] = manager->which_world_is_this( manager->getNodeTimestamp(b) );
-
-
-        edgeinfo["weight"] = manager->getEdgeWeight(i);
-        edgeinfo["description_string"] = manager->getEdgeDescriptionString(i);
-
-        edgeinfo["getEdgePose"] = PoseManipUtils::prettyprintMatrix4d( manager->getEdgePose( i ) );
-
-        auto getEdgePose_after_opt = this->getNodePose(b).inverse() * this->getNodePose(a);
-        edgeinfo["getEdgePose_after_opt"] = PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt );
-
-
-        // switching_var
-        if( i < n_opt_switch() )
-            edgeinfo["switching_var_after_opt"] = get_raw_ptr_to_opt_switch(i)[0];
-
-        all_info["PoseGraphSLAM_loopedgeinfo"].push_back( edgeinfo );
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        _opt_switch_[ _opt_switch_len_ ] = tmp[0];
+        _opt_switch_len_++;
 
     }
-
-
-    #if 0
-    // odometry edges
-    for( int i=0 ; i<this->get_odomedge_residue_info_size() ; i++ ) {
-        json odom_edge_info;
-
-        auto m = this->get_odomedge_residue_info(i);
-        odom_edge_info["u"] = std::get<0>(m);
-        odom_edge_info["u-f"] = std::get<1>(m);
-        odom_edge_info["weight"] = std::get<2>(m);
-        odom_edge_info["debug_string"] = std::get<3>(m);
-        all_info["PoseGraphSLAM_odom_edge_info"].push_back( odom_edge_info );
+    #else
+    double *tmp = new double[1];
+    tmp[0] = 0.99;
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        opt_switch.push_back( tmp );
     }
     #endif
-
-
-    cout << TermColor::GREEN() << "[PoseGraphSLAM::saveAsJSON]\n" <<  all_info["meta_data"] << endl;
-    cout << "Write : "<< base_path+"/log_optimized_poses.json"<< endl;
-    cout << "Done! "<< TermColor::RESET() << endl;
-    std::ofstream outf(base_path+"/log_optimized_poses.json");
-    if( !outf.is_open() ) {
-        cout << "[ERROR PoseGraphSLAM::saveAsJSON] Cannot open file\n";
-        return false;
-    }
-
-    outf << std::setw(4) << all_info << std::endl;
-    return true;
-
 }
+
 
 //######## END Public Interfaces to retrive optimized poses ################
 
@@ -1194,165 +1141,6 @@ int PoseGraphSLAM::get_loopedge_residue_info_size() const
 }
 
 
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//---  This is the newer (Feb22 2019) implementation of `new_optimize6DOF`.---
-//---  It is an infinite loop and triggers the solve when there are new    ---
-//---  loop edges in the manager.                                          ---
-//----------------------------------------------------------------------------
-void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
-{
-    cout << "#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#\n";
-    cout << TermColor::BLUE() << "Start reinit_ceres_problem_onnewloopedge_optimize6DOF()" << TermColor::RESET() << endl;
-    cout << "#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#\n";
-
-    ros::Rate loop_rate(0.5);
-    int prev_loopedge_len = 0;
-
-    while( reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled )
-    {
-        //--- Header info at start of every wakeup
-        int node_len = manager->getNodeLen();
-        int loopedge_len = manager->getEdgeLen();
-        cout << "---\n";
-        cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << endl;
-
-        //--- If no new loop edges sleep again!
-        if( prev_loopedge_len == loopedge_len ) {
-            prev_loopedge_len = loopedge_len;
-            cout << "No new loop edge, sleep again!\n";
-            reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
-            loop_rate.sleep();
-            continue;
-        }
-
-        if( manager->curr_kidnap_status() ) {
-            cout << "kidnapped!. sleep \n";
-            reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
-            loop_rate.sleep();
-            continue;
-        }
-
-
-        cout << TermColor::iMAGENTA() << "#@#@#@++#@#@#@++\n#@#@#@++ TRIGGERED #@#@#@++\n#@#@#@++#@#@#@++\n" << TermColor::RESET();
-        print_worlds_info( 0 );
-        cout << "n_opt_variables()=========>" << n_opt_variables() << endl;
-
-        //--- Create and Solve the problem
-        {
-        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 1;
-        //-----------------------
-        //-0- INIT CERES Problem
-        //-----------------------
-        ceres::Problem reint_problem;
-        ceres::Solver::Options reint_options;
-        ceres::Solver::Summary reint_summary;
-        reint_options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-        reint_options.minimizer_progress_to_stdout = false;
-        reint_options.max_num_iterations = 8;
-        eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
-        // robust_norm = new ceres::CauchyLoss(1.0);
-        robust_norm = new ceres::HuberLoss(0.1);
-
-
-
-        //-----------------------
-        //-1- Odometry Edges
-        //-----------------------
-        for( int u=0 ; u<node_len ; u++ )
-        {
-            int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp(u) );
-            int setID_of__world_of_u = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u );
-            cout << TermColor::YELLOW() << "u=" << u << "\tworld_of_u=" << world_of_u << "\tsetID_of__world_of_u=" << setID_of__world_of_u << TermColor::RESET() << endl;
-
-            // in
-            Matrix4d wset_T_w; //< Pose between the world and its iIDworld;
-            if( manager->getWorldsConstPtr()->is_exist(setID_of__world_of_u, world_of_u) ) {
-                wset_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds( setID_of__world_of_u, world_of_u );
-                cout << "wset_T_w=" << PoseManipUtils::prettyprintMatrix4d( wset_T_w ) << endl;
-            }
-            else {
-                cout << TermColor::RED() << "manager->getWorldsConstPtr()->is_exist("<<setID_of__world_of_u<<","<< world_of_u<<") gave false. This cannot be happening\n" << TermColor::RESET();
-                exit(3);
-            }
-
-            // this is bad!!!
-            // best if to allocate a large `double* array` instead of current ``vector<double*>``
-            //      make it right!
-
-            // if opt variable of u does not exisit then allocate it
-            for( int yp=n_opt_variables()-1 ; yp<= u ; yp++ ) {
-                allocate_and_append_new_opt_variable_withpose( Matrix4d::Identity() );
-                cout << "allocate_and_append_new_opt_variable_withpose, now size({u})=" << n_opt_variables() << endl;
-            }
-
-
-            Matrix4d wset_T_u; //< w{setid}_T_u
-            if( world_of_u == setID_of__world_of_u ) {
-                // the case where it is in its own world
-                assert( manager->nodePoseExists(u) && "manager->nodePoseExists doesnt seem to exist when init for solving the ceres problem\n"  );
-                wset_T_u = manager->getNodePose( u );
-            }
-            else {
-                // the case where u is in a different world than its own
-                wset_T_u = wset_T_w * manager->getNodePose( u );
-            }
-
-            // Set the initial guess of node pose
-            assert( u<n_opt_variables() );
-            update_opt_variable_with( u, wset_T_u );
-
-
-
-            // // add u <---> u-f
-            // for( int f=1 ; f<4 ; f++ ){
-            //     setID_of__world_of_u_m_f = setID( world_id_of(u-f) );
-            //     if( setID_of__world_of_u < 0 || setID_of__world_of_u_m_f < 0  ) {
-            //         cout << TermColor::BLUE() << "not adding odom edge "<< u << "<--->"<< u-f << endl;
-            //
-            //     }
-            // }
-
-
-
-        }
-
-
-
-
-        //-----------------------
-        //-2- Loop Edges (intra world)
-        //-----------------------
-
-
-        //-----------------------
-        //-3- Loop edges (inter world)
-        //-----------------------
-
-
-        //-----------------------
-        //-4- ceres::Solve()
-        //-----------------------
-
-
-        }
-        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 2;
-
-
-
-
-
-
-        // Bookkeeping
-        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
-        loop_rate.sleep();
-    }
-
-
-    cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF`" << TermColor::RESET() << endl;
-
-
-}
 
 
 void PoseGraphSLAM::print_worlds_info( int verbosity )
@@ -1452,43 +1240,460 @@ void PoseGraphSLAM::print_worlds_info( int verbosity )
 }
 
 
-const int PoseGraphSLAM::n_opt_switch() const {
-    #if defined(___OPT_AS_DOUBLE_STAR)
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    return _opt_switch_len_;
-    #else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    return opt_switch.size();
-    #endif
-}
 
-double * PoseGraphSLAM::get_raw_ptr_to_opt_switch( int i ) const {
-    #if defined(___OPT_AS_DOUBLE_STAR)
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    // return &_opt_switch_[i];
-    return (i>=0 && i<_opt_switch_len_)?&_opt_switch_[i]:NULL;
-    #else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    return opt_switch[i];
-    #endif
-}
+bool PoseGraphSLAM::saveAsJSON(const string base_path)
+{
+    json all_info;
+    const static IOFormat CSVFormat(FullPrecision, DontAlignCols, ",", ";");
 
-void PoseGraphSLAM::allocate_and_append_new_edge_switch_var() {
-    #if defined(___OPT_AS_DOUBLE_STAR)
-    double tmp[10];
-    tmp[0] = 0.99;
+    all_info["meta_data"]["nNodes"] = nNodes();
+
+
+    for( int i=0 ; i<nNodes() ; i++ )
     {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        _opt_switch_[ _opt_switch_len_ ] = tmp[0];
-        _opt_switch_len_++;
+        json opt_var_i;
+
+        // Save Optimed pose
+        Matrix4d w_T_c_opt = getNodePose( i );
+        // getNodePose( i, w_T_c_opt );
+
+        std::stringstream ss;
+        ss << w_T_c_opt.format(CSVFormat);
+        opt_var_i["wTc_opt"] = ss.str();
+        opt_var_i["wTc_opt_prettyprint"] = PoseManipUtils::prettyprintMatrix4d( w_T_c_opt );
+
+
+        // save corresponding odom poses
+        Matrix4d w_T_c_odom;
+        manager->getNodePose( i, w_T_c_odom );
+        std::stringstream ss2;
+        ss2 << w_T_c_odom.format(CSVFormat);
+        opt_var_i["w_T_c_odom"] = ss2.str();
+        opt_var_i["w_T_c_odom_prettyprint"] = PoseManipUtils::prettyprintMatrix4d( w_T_c_odom );
+        opt_var_i["node_i"] = i;
+
+        all_info["PoseGraphSLAM_nodes"].push_back( opt_var_i );
+    }
+
+
+    // loop edges
+    for( int i=0 ; i<manager->getEdgeLen() ; i++ ) {
+        json edgeinfo;
+
+        // bTa with odometry
+        edgeinfo["getEdge_i"] = i;
+        int a = manager->getEdgeIdxInfo( i ).first;
+        int b = manager->getEdgeIdxInfo( i ).second;
+        edgeinfo["a"] = a;
+        edgeinfo["b"] = b;
+
+        edgeinfo["world_of_a"] = manager->which_world_is_this( manager->getNodeTimestamp(a) );
+        edgeinfo["world_of_b"] = manager->which_world_is_this( manager->getNodeTimestamp(b) );
+
+
+        edgeinfo["weight"] = manager->getEdgeWeight(i);
+        edgeinfo["description_string"] = manager->getEdgeDescriptionString(i);
+
+        edgeinfo["getEdgePose"] = PoseManipUtils::prettyprintMatrix4d( manager->getEdgePose( i ) );
+
+        auto getEdgePose_after_opt = this->getNodePose(b).inverse() * this->getNodePose(a);
+        edgeinfo["getEdgePose_after_opt"] = PoseManipUtils::prettyprintMatrix4d( getEdgePose_after_opt );
+
+
+        // switching_var
+        if( i < n_opt_switch() )
+            edgeinfo["switching_var_after_opt"] = get_raw_ptr_to_opt_switch(i)[0];
+
+        all_info["PoseGraphSLAM_loopedgeinfo"].push_back( edgeinfo );
 
     }
-    #else
-    double *tmp = new double[1];
-    tmp[0] = 0.99;
-    {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        opt_switch.push_back( tmp );
+
+
+    #if 0
+    // odometry edges
+    for( int i=0 ; i<this->get_odomedge_residue_info_size() ; i++ ) {
+        json odom_edge_info;
+
+        auto m = this->get_odomedge_residue_info(i);
+        odom_edge_info["u"] = std::get<0>(m);
+        odom_edge_info["u-f"] = std::get<1>(m);
+        odom_edge_info["weight"] = std::get<2>(m);
+        odom_edge_info["debug_string"] = std::get<3>(m);
+        all_info["PoseGraphSLAM_odom_edge_info"].push_back( odom_edge_info );
     }
     #endif
+
+
+
+    cout << TermColor::GREEN() << "[PoseGraphSLAM::saveAsJSON]\n" <<  all_info["meta_data"] << endl;
+    cout << "Write : "<< base_path+"/log_optimized_poses.json"<< endl;
+    cout << "Done! "<< TermColor::RESET() << endl;
+    std::ofstream outf(base_path+"/log_optimized_poses.json");
+    if( !outf.is_open() ) {
+        cout << "[ERROR PoseGraphSLAM::saveAsJSON] Cannot open file\n";
+        return false;
+    }
+
+    outf << std::setw(4) << all_info << std::endl;
+    return true;
+
+}
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//---  This is the newer (Feb22 2019) implementation of `new_optimize6DOF`.---
+//---  It is an infinite loop and triggers the solve when there are new    ---
+//---  loop edges in the manager.                                          ---
+//----------------------------------------------------------------------------
+// #define __reint_allocation_cout(msg)  msg;
+#define __reint_allocation_cout(msg)  ;
+
+// #define __reint_odom_cout(msg) msg;
+#define __reint_odom_cout(msg) ;
+
+// #define __reint_odom_detail_cout(msg) msg;
+#define __reint_odom_detail_cout(msg) ;
+void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
+{
+    cout << "#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#\n";
+    cout << TermColor::BLUE() << "Start reinit_ceres_problem_onnewloopedge_optimize6DOF()" << TermColor::RESET() << endl;
+    cout << "#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#\n";
+
+    ros::Rate loop_rate(0.5);
+    int prev_loopedge_len = 0;
+    int prev_node_len = 0;
+    ElapsedTime eta;
+
+    while( reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled )
+    {
+        //--- Header info at start of every wakeup
+        int node_len = manager->getNodeLen();
+        int loopedge_len = manager->getEdgeLen();
+        cout << "---\n";
+        cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << "\t\t";
+        cout << "prev_node_len=" << prev_node_len << "\tprev_loopedge_len=" << prev_loopedge_len << endl;
+        cout << "\tso total_new_loopedges=" << loopedge_len - prev_loopedge_len << endl;
+
+        //--- If no new loop edges sleep again!
+        if( prev_loopedge_len == loopedge_len ) {
+            prev_loopedge_len = loopedge_len;
+            cout << "No new loop edge, sleep again!\n";
+            reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
+            loop_rate.sleep();
+            continue;
+        }
+
+        if( manager->curr_kidnap_status() ) {
+            cout << "kidnapped!. sleep \n";
+            reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
+            loop_rate.sleep();
+            continue;
+        }
+
+
+        cout << TermColor::iMAGENTA() << "#@#@#@++#@#@#@++\n#@#@#@++ TRIGGERED #@#@#@++\n#@#@#@++#@#@#@++\n" << TermColor::RESET();
+        print_worlds_info( 0 );
+        cout << "<=========== n_opt_variables() =========>" << n_opt_variables() << endl;
+
+
+        //--- Create and Solve the problem
+        {
+        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 1;
+        //-----------------------
+        //-0- INIT CERES Problem
+        //-----------------------
+        ceres::Problem reint_problem;
+        ceres::Solver::Options reint_options;
+        ceres::Solver::Summary reint_summary;
+        reint_options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+        reint_options.minimizer_progress_to_stdout = true;
+        reint_options.max_num_iterations = 50;
+        eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
+        // robust_norm = new ceres::CauchyLoss(1.0);
+        robust_norm = new ceres::HuberLoss(0.1);
+
+
+
+        int __new_node_allocations = 0;
+        for( int yp=n_opt_variables() ; yp< node_len ; yp++ ) {
+            allocate_and_append_new_opt_variable_withpose( Matrix4d::Identity() );
+            __reint_allocation_cout( cout << "++  allocate_and_append_new_opt_variable_withpose, after allocation size({u})=" << n_opt_variables() << endl; )
+            __new_node_allocations++;
+
+            // [IMPORTANT] : remeber to specify (to ceres) the parameter blocks and their parameterization.
+            reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_q(yp), 4 );
+            reint_problem.SetParameterization( get_raw_ptr_to_opt_variable_q(yp),  eigenquaternion_parameterization );
+            reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(yp), 3 );
+        }
+
+        int __new_opt_switch_allocations = 0;
+        for( int yp=n_opt_switch() ; yp< loopedge_len ; yp++ ) {
+            allocate_and_append_new_edge_switch_var();
+            __reint_allocation_cout( cout << "+++ allocate_and_append_new_edge_switch_var, after allocation size({u})=" << n_opt_switch() << endl; )
+            __new_opt_switch_allocations++;
+
+            reint_problem.AddParameterBlock( get_raw_ptr_to_opt_switch(yp), 1 );
+
+        }
+
+        cout << "[New Allocations] __new_node_allocations="<<__new_node_allocations << "  " << "__new_opt_switch_allocations=" << __new_opt_switch_allocations << endl;
+
+
+        //-----------------------
+        //-2- Loop Edges (intra world)
+        //-----------------------
+        //-----------------------
+        //-3- Loop edges (inter world)
+        //-----------------------
+        eta.tic();
+        for( int e=0 ; e<loopedge_len ; e++ ) {
+            MatrixXd bTa = manager->getEdgePose(e); //< This is the edge's observed pose, as received in the edge-message
+            double weight = manager->getEdgeWeight(e);
+            auto paur = manager->getEdgeIdxInfo(e);
+            int _a = paur.first; // current, eg. 386
+            int _b = paur.second; //previous  eg. 165
+            int __a_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) );
+            int __b_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) );
+            if( __a_world_is < 0 || __b_world_is < 0 )
+                continue; // skip if the edge's 1 node lies in dead-zone
+            int __setid_of_world_A = manager->getWorldsPtr()->find_setID_of_world_i( __a_world_is );
+            int __setid_of_world_B = manager->getWorldsPtr()->find_setID_of_world_i( __b_world_is );
+
+
+            bool s1 = (__a_world_is == __b_world_is );
+            bool s2 = (__setid_of_world_A == __setid_of_world_B );
+
+            if( s1 && s2 ) cout << "";
+            if( !s1 && s2 ) cout << TermColor::CYAN();
+            if( s1 && !s2 ) cout << TermColor::BLUE();
+            if( !s1 && !s2 ) cout << TermColor::MAGENTA();
+
+            cout << "#e=" << e;
+            cout << "\t(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(4) << weight;
+            cout << "\tbTa(observed)="  << PoseManipUtils::prettyprintMatrix4d(bTa);
+            // cout << "\n\tdescription_string=" << manager->getEdgeDescriptionString(e) ;
+            cout << endl;
+
+            cout << "\ta's world is: " << __a_world_is;
+            cout << "\tb's world is: " <<  __b_world_is;
+            cout << "\tworld#" << __a_world_is << " is in setID=" << __setid_of_world_A << "\t" ;
+            cout <<   "world#" << __b_world_is << " is in setID=" << __setid_of_world_B << "\n" ;
+            // manager->getWorldsPtr()->print_summary();
+            cout << TermColor::RESET();
+
+
+            if(  __a_world_is < 0 || __b_world_is < 0 ) {
+                cout << "either of the worlds is a kidnapped world (negative id). ignore this edge\n";
+                continue;
+            }
+
+            if( __a_world_is == __b_world_is ) // Intra World
+            {
+                cout << "This is intra-world loop edge.\n";
+            }
+            else { //Inter World
+                // calculate the relative transforms between the two worlds if you already do not know.
+                // If you know the transform between the 2 worlds, no need to recompute.
+
+                if( manager->getWorldsPtr()->is_exist(__b_world_is,__a_world_is) ) {
+                    auto rel_wb_T_wa = manager->getWorldsPtr()->getPoseBetweenWorlds( __b_world_is, __a_world_is );
+                    cout << "I already know the relative transforms between the 2 worlds, ";
+                    // cout << "wa="<< __a_world_is << ";wb=" << __b_world_is;
+                    cout << " wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << TermColor::RESET() << endl;
+                }
+                else {
+
+
+                    cout << TermColor::iWHITE() << "I DONOT know the relative transforms between the 2 world, wa= "<< __a_world_is << " ; wb=" << __b_world_is << " \n" << TermColor::RESET();
+                    // compute the relative transforms between the 2 worlds
+                    Matrix4d wa_T_a = this->getNodePose( _a );
+                    Matrix4d wb_T_b = this->getNodePose( _b );
+                    Matrix4d b_T_a_observed = manager->getEdgePose(e);
+
+                    Matrix4d wb_T_a = wb_T_b * b_T_a_observed;
+                    Matrix4d wb_T_wa = wb_T_a * wa_T_a.inverse();
+                    cout << "I just computed the rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << TermColor::RESET() << endl;
+
+                    cout << "setting var rel_pose_between_worlds__wb_T_wa[ " << __b_world_is << "," << __a_world_is << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
+                    string info_string = "this pose computed from edge "+ std::to_string(_a) + " <--> " + std::to_string(_b);
+                    // THIS IS THE ONLY PLACE WHERE THE 2 SETS CAN MERGE AND THE SETID OF THE WORLDS CAN CHANGE.
+                    manager->getWorldsPtr()->setPoseBetweenWorlds( __b_world_is, __a_world_is, wb_T_wa,  info_string );
+
+                    cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
+                    manager->getWorldsPtr()->print_summary();
+                    cout << TermColor::iWHITE() << "....\n" << TermColor::RESET();
+
+
+
+
+                }
+
+            }
+
+            // simply add edge residue
+            ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            reint_problem.AddResidualBlock( cost_function, NULL,
+                get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
+                get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first),
+                get_raw_ptr_to_opt_switch(e)
+            );
+
+        }
+        cout << "[ETA loopedge_len] ms=" << eta.toc_milli() << " loopedge_len="<< loopedge_len << endl;
+
+
+
+
+        //-----------------------
+        //-1- Add all Odometry Edges
+        //-----------------------
+        eta.tic();
+        for( int u=0 ; u<node_len ; u++ ) //TODO: No need to initialize the guess for all the nodes. only the unsolved and the setID changed nodes need to be reinitialized.
+        {
+            int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp(u) );
+            int setID_of__world_of_u = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u );
+            __reint_odom_cout(
+            cout << TermColor::YELLOW() << "u=" << u << "\t";
+            // cout << "\tworld_of_u=" << world_of_u << "\tsetID_of__world_of_u=" << setID_of__world_of_u << TermColor::RESET() ;
+            )
+
+            if( setID_of__world_of_u < 0 ){ // this indicates kidnapped nodes.
+                __reint_odom_cout( cout << "\n"; )
+                continue;
+            }
+
+            // relative pose between odometry's world-origin and setID's origin
+            Matrix4d wset_T_w; //< Pose between the world and its iIDworld;
+            if( manager->getWorldsConstPtr()->is_exist(setID_of__world_of_u, world_of_u) ) {
+                wset_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds( setID_of__world_of_u, world_of_u );
+                __reint_odom_cout(
+                cout << "wset_T_w=";
+                cout << setID_of__world_of_u << "_T_" << world_of_u << " = ";
+                cout << PoseManipUtils::prettyprintMatrix4d( wset_T_w ) << endl;
+                )
+            }
+            else {
+                // this is impossible.
+                cout << TermColor::RED() << "manager->getWorldsConstPtr()->is_exist("<<setID_of__world_of_u<<","<< world_of_u<<") gave false. This cannot be happening\n" << TermColor::RESET();
+                exit(3);
+            }
+
+
+
+            // --------> Set the initial guess of node pose
+            //TODO: you don't need to set the initial guess from odometry always. You can use the solved_until. Look at the node init code in thread `new_optimize6DOF`
+            Matrix4d wTu ; //< pose of this node in its own world.
+            wTu = manager->getNodePose( u );
+
+
+            Matrix4d wset_T_u; //< w{setid}_T_u
+            if( world_of_u == setID_of__world_of_u ) {///< the case where it is in its own world
+                assert( manager->nodePoseExists(u) && "manager->nodePoseExists doesnt seem to exist when init for solving the ceres problem\n"  );
+                wset_T_u = wTu;
+            }
+            else {                ///< the case where u is in a different world than its own
+                wset_T_u = wset_T_w * wTu;
+            }
+
+            assert( u<n_opt_variables() );
+            update_opt_variable_with( u, wset_T_u );
+
+
+            // --------------> add odometry residue :  u <---> u-f
+            for( int f=1 ; f<5 ; f++ ){
+                int world_of_u_m_f = manager->which_world_is_this( manager->getNodeTimestamp(u-f) );
+                int setID_of__world_of_u_m_f = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u_m_f );
+
+                if( setID_of__world_of_u < 0 || setID_of__world_of_u_m_f < 0 ) {
+                    __reint_odom_detail_cout( cout << TermColor::BLUE() << "not add odom coz u is in deadzone"<< u << "<--->"<< u-f << "\t"; )
+                    continue;
+                }
+
+                if( u-f < 0 ) {
+                    __reint_odom_detail_cout( cout << TermColor::BLUE() << "not add odom coz u-f is in deadzone"<< u << "<--->"<< u-f << "\t"; )
+                    continue;
+                }
+
+
+                __reint_odom_detail_cout( cout << "add edge " << u << "<--->" << u-f << "\t"; )
+
+                // Pose of odometry edge
+                Matrix4d w_M_u = manager->getNodePose(u);
+                Matrix4d w_M_umf = manager->getNodePose(u-f);
+                Matrix4d u_M_umf =  w_M_u.inverse() * w_M_umf ;
+
+                // weight inversely proportional to yaw. More the yaw, less should the weight.
+                // The idea is that, odometry tends to be most error prone on yaws
+                double odom_edge_weight=1.0;
+                odom_edge_weight *= pow(0.9,f);
+                Vector3d __ypr = PoseManipUtils::R2ypr( u_M_umf.topLeftCorner<3,3>() );
+                odom_edge_weight *= exp( -__ypr(0)*__ypr(0)/6. );
+
+                // cost
+                ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
+                reint_problem.AddResidualBlock( cost_function, NULL,
+                    get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
+                    get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
+
+
+            }
+            __reint_odom_detail_cout( cout << endl; )
+
+        }
+        cout << "[ETA odometry_edges_terms] ms=" << eta.toc_milli() << " node_len="<< node_len << endl;
+
+
+        //-----------------------------
+        //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants.
+        //------------------------------
+        for( int ww=0 ; ww<manager->n_worlds() ; ww++ ) {
+            int ww_start = manager->nodeidx_of_world_i_started( ww );
+            reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
+            reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
+        }
+
+
+        //-----------------------
+        //-4- ceres::Solve()
+        //-----------------------
+        #if 1
+        cout << TermColor::iGREEN() ;
+        cout << "solve()\n";
+        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 2; // solving in progress.
+        eta.tic();
+        {
+            std::lock_guard<std::mutex> lk(mutex_opt_vars);
+            ceres::Solve( reint_options, &reint_problem, &reint_summary );
+
+            cout << "summary.termination_type = "<< (ceres::TerminationType::CONVERGENCE == reint_summary.termination_type) << endl;
+            // if( reint_summary.termination_type == ceres::TerminationType::CONVERGENCE )
+                solved_until = node_len-1;
+        }
+        cout << reint_summary.FullReport() << endl;
+
+        cout << "Solve() took (milli-sec) : " << eta.toc_milli()  << endl;
+        cout << reint_summary.BriefReport() << endl;
+        cout << TermColor::RESET() << endl;
+        #endif
+
+
+        }
+        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 3;
+
+
+
+
+
+
+        // Bookkeeping
+        reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
+        prev_loopedge_len = loopedge_len;
+        prev_node_len = node_len;
+        loop_rate.sleep();
+    }
+
+
+    cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF`" << TermColor::RESET() << endl;
+    print_worlds_info(2);
+
 }

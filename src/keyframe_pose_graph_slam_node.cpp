@@ -108,14 +108,17 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
                 c_b = color[0]/255.;
             }
 
-            if( (it->second).size() > 10 ) {
-            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b,
-            10, 0.0, .7, 0.0, false );}
-            else {
-            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
-            }
+            viz->publishNodesAsLineStrip( it->second, ns.c_str(), 0.0, 0.7, 0.0 );
+            // if( (it->second).size() > 10 ) {
+            // viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b,
+            // 10, 0.0, .7, 0.0, false );}
+            // else {
+            // viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+            // }
 
         }
+
+        viz->publishLastNEdges( -1 );
 
 
         loop_rate.sleep();
@@ -475,11 +478,11 @@ int main( int argc, char ** argv)
     // another class for the core pose graph optimization
     PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
     // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
-    slam->new_optimize6DOF_enable();
-    std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
+    // slam->new_optimize6DOF_enable();
+    // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
-    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
-    // std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
     // another class for viz.
@@ -506,8 +509,8 @@ int main( int argc, char ** argv)
         loop_rate.sleep();
     }
 
-    slam->new_optimize6DOF_disable();
-    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
+    // slam->new_optimize6DOF_disable();
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
 
     // th1.join();
     // th2.join();
