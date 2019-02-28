@@ -50,6 +50,8 @@ public:
     bool setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const string info_string );
     void getAllKeys( vector<std::pair<int,int> >& all_keys ) const ;
 
+    void getWorld2SetIDMap( std::map<int,int>& mipmap ) const; //< world[i] will give the ith world's setID. Can be used to generate difference on union_sets()
+
     // m and n are worldIDs. A rel pose between two world will exist if they are in same set.
     // this will return true for (n,m) as well.
     bool is_exist( int m, int n ) const ;

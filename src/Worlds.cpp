@@ -163,7 +163,7 @@ bool Worlds::setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const str
 
     // ideally, disjoint_set.union_sets( m, n ), but doing the min max trick to retain the id of earliest sample.
     disjoint_set.union_sets( max(m,n), min(m,n) );
-    disjoint_set_debug += "union_sets( " + std::to_string(m) + "," + std::to_string(n) + ")\n";
+    disjoint_set_debug += "\t\t\tunion_sets( " + std::to_string(m) + "," + std::to_string(n) + ")\n";
 }
 
 // m and n are worldIDs. A rel pose between two world will exist if they are in same set.
@@ -212,6 +212,14 @@ void Worlds::getAllKeys( vector<std::pair<int,int> >& all_keys ) const
     }
 }
 
+void Worlds::getWorld2SetIDMap( std::map<int,int>& mipmap ) const
+{
+    mipmap.clear();
+    for( int ww=0; ww<n_worlds() ; ww++ ) {
+        mipmap[ww] = find_setID_of_world_i( ww );
+    }
+}
+
 void Worlds::world_starts( ros::Time _t )
 {
     std::lock_guard<std::mutex> lk(mutex_world);
@@ -220,7 +228,7 @@ void Worlds::world_starts( ros::Time _t )
 
     // Add a new element in disjoiunt set.
     disjoint_set.add_element( vec_world_starts.size() -1, true );
-    disjoint_set_debug += "add_element( " + std::to_string( vec_world_starts.size() -1 ) + ")\n";
+    disjoint_set_debug += "\t\t\tadd_element( " + std::to_string( vec_world_starts.size() -1 ) + ")\n";
 }
 
 void Worlds::world_ends( ros::Time _t )

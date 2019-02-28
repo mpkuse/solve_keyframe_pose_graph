@@ -305,10 +305,13 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         // cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
         int latest_pose_worldid = -1;
+        int ____solvedUntil = slam->solvedUntil(); //note: solvedUntil is the index until which posegraph was solved
+        int ____solvedUntil_worldid =  manager->which_world_is_this( manager->getNodeTimestamp(____solvedUntil) );
+        if( ____solvedUntil_worldid < 0 ) ____solvedUntil_worldid = -____solvedUntil_worldid - 1;
+        // cerr << "\t[opt_traj_publisher_colored_by_world] slam->solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid" << ____solvedUntil_worldid << endl;
+
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
-            int ____solvedUntil = slam->solvedUntil();
-            // cerr << "\ti=" << i << " slam->solvedUntil=" << ____solvedUntil << endl;
             // i>=0 and i<solvedUntil()
             if( i>=0 && i< ____solvedUntil ) {
                 Matrix4d w_T_c_optimized, w_T_c;
@@ -348,11 +351,14 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 // cerr << "world_id=" << world_id << endl;
 
                 Matrix4d w_TM_i;
-                if(____solvedUntil > 1 ) {
+                if(____solvedUntil > 1 && world_id == ____solvedUntil_worldid) {
                     // cerr << "A";
-                    Matrix4d w_T_last = slam->getNodePose( slam->solvedUntil()-2 );
-                    Matrix4d last_M_i = manager->getNodePose( slam->solvedUntil()-2 ).inverse() * manager->getNodePose( i );
+                    int last_idx = ____solvedUntil-1;//TODO: if the start of world is a newer event that should use it rather than solvedUntil.
+                    Matrix4d w_T_last = slam->getNodePose(last_idx );
+                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
                     w_TM_i = w_T_last * last_M_i;
+
+
                 } else {
                     // cerr << "B";
                     w_TM_i = manager->getNodePose( i );
