@@ -1386,6 +1386,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     // robust_norm = new ceres::CauchyLoss(1.0);
     robust_norm = new ceres::HuberLoss(0.1);
 
+    std::map< int , std::tuple<int,int> > changes_to_setid_on_set_union; // key:= worldID, value:= (prev setID of this world, new setID of this world).
+
 
     while( reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled )
     {
@@ -1548,14 +1550,17 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                     cout << TermColor::iWHITE();
                     cout << "Changes in the setID of the worlds\n";
+                    changes_to_setid_on_set_union.clear();
                     for( auto itt=mipmap_before_union.begin() ; itt!=mipmap_before_union.end() ; itt++ ) {
                         int setid_before =  itt->second;
                         int setid_after = mipmap_after_union.at( itt->first );
                         cout << "world#" << itt->first  << ": " << setid_before << "--->" << setid_after << "  ";
                         if( setid_before ==  setid_after )
                             cout << "NOCHANGE\n";
-                        else
+                        else {
                             cout << "CHANGE\n";
+                            changes_to_setid_on_set_union[ itt->first ] = std::make_tuple( setid_before, setid_after );
+                        }
                     }
                     cout << TermColor::iWHITE() << "....\n" << TermColor::RESET();
 
@@ -1683,8 +1688,9 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             //############### --------> Set the initial guess of node pose (in this own world)
             Matrix4d wTu ; //< pose of this node in its own world.
 
-            if( u < solvedUntil() ) {
-                __reint_gueses( cout << "skip because u<solvedUntil() " << TermColor::RESET() << endl );
+            // When to skip the update
+            if( u>0 && u <= solvedUntil() &&  changes_to_setid_on_set_union.count(world_of_u) == 0 ) {
+                __reint_gueses( cout << "skip because u<solvedUntil() and this world is not in the change list " << TermColor::RESET() << endl );
                 cout << TermColor::iYELLOW() << "|" << TermColor::RESET();
                 continue;// skip. let the initial guess remain as it is from previous Solve().
             }else {
@@ -1734,6 +1740,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
 
         }
+        changes_to_setid_on_set_union.clear(); //< this is important to clear. When the setID changes (upon union_sets), this map is filled in to indicate the changes. The node initialization uses this to selectively reinitialize old node.
         cout << "\n[ETA initial_guesses] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl;
 
 
