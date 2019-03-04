@@ -315,7 +315,7 @@ struct opt_traj_publisher_options
 {
     // 10 //< color the line with worldID
     // 12 //< color the line with setID( worldID )
-    int line_color_style;
+    int line_color_style=10;
 };
 
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz, const opt_traj_publisher_options& options )
@@ -400,23 +400,6 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 w_TM_i = w_T_last * last_M_i;}
 
 
-                #if 0
-                Matrix4d w_TM_i;
-                if(____solvedUntil > 1 && world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==false) {
-                    // cerr << "A";
-                    int last_idx = ____solvedUntil;//TODO: if the start of world is a newer event that should use it rather than solvedUntil.
-                    Matrix4d w_T_last = slam->getNodePose(last_idx );
-                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
-                    w_TM_i = w_T_last * last_M_i;
-
-
-                } else {
-                    // cerr << "B";
-                    w_TM_i = manager->getNodePose( i );
-                }
-
-                // cerr << "X    " << PoseManipUtils::prettyprintMatrix4d( w_TM_i);
-                #endif
 
                 if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
