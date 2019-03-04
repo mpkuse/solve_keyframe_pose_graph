@@ -73,6 +73,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(5);
+    double offset_x = 30., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
     while( ros::ok() )
@@ -83,11 +84,16 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         }
 
         jmb.clear();
+
+        // collect all
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
             if( manager->nodePoseExists(i )  ) {
                 auto w_T_c = manager->getNodePose( i );
+                //add offset
+                w_T_c(0,3) += offset_x; w_T_c(1,3) += offset_y; w_T_c(2,3) += offset_z;
+
                 if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
 
@@ -96,6 +102,10 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         }
 
 
+
+        // Publish all the odometries (unregistered) and also plot the loop edges.
+        // make the follow to 1 if you need this.
+        #if 0
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
             string ns = "odom-world#"+to_string( it->first );
 
@@ -117,8 +127,23 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
             // }
 
         }
-
         viz->publishLastNEdges( -1 );
+        #endif
+
+
+        // only publish the latest odometry. Set this to zero if you dont need this.
+        #if 1
+        int to_publish_key = -1;
+        for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+
+            if( it->first > to_publish_key &&  it->first >=0 )
+                to_publish_key = it->first;
+        }
+        viz->publishNodesAsLineStrip( jmb[to_publish_key] , "latest_odometry", 0.0, 0.7, 0.0 );
+
+
+
+        #endif
 
 
         loop_rate.sleep();
@@ -224,7 +249,7 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
     {
         cv::Mat im_disp;
         manager->getWorldsConstPtr()->disjoint_set_status_image(im_disp);
-        cv::imshow( "win" , im_disp );
+        cv::imshow( "disjoint_set_status_image" , im_disp );
         cv::waitKey(30);
 
         loop_rate.sleep();
@@ -283,10 +308,17 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
 
 // plots the corrected trajectories, different worlds will have different colored lines
 
-// #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
-#define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 12 //< color the line with setID( worldID )
+#define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
+// #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 12 //< color the line with setID( worldID )
 
-void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
+struct opt_traj_publisher_options
+{
+    // 10 //< color the line with worldID
+    // 12 //< color the line with setID( worldID )
+    int line_color_style;
+};
+
+void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz, const opt_traj_publisher_options& options )
 {
 
     ros::Rate loop_rate(20);
@@ -307,16 +339,18 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         int latest_pose_worldid = -1;
         int ____solvedUntil = slam->solvedUntil(); //note: solvedUntil is the index until which posegraph was solved
         int ____solvedUntil_worldid =  manager->which_world_is_this( manager->getNodeTimestamp(____solvedUntil) );
-        if( ____solvedUntil_worldid < 0 ) ____solvedUntil_worldid = -____solvedUntil_worldid - 1;
+        bool ____solvedUntil_worldid_is_neg = false;
+        if( ____solvedUntil_worldid < 0 ) { ____solvedUntil_worldid = -____solvedUntil_worldid - 1; ____solvedUntil_worldid_is_neg=true; }
         // cerr << "\t[opt_traj_publisher_colored_by_world] slam->solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid" << ____solvedUntil_worldid << endl;
 
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
+            int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+
             // i>=0 and i<solvedUntil()
             if( i>=0 && i< ____solvedUntil ) {
                 Matrix4d w_T_c_optimized, w_T_c;
 
-                int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
                 // cerr << "world_id=" << world_id << "   ";
                 // cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
                 // cerr << "manager->nodePoseExists(" << i << ") " << manager->nodePoseExists(i ) << " \n";
@@ -346,14 +380,31 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             // i>solvedUntil() < manager->getNodeLen() only odometry available here.
 
             if( i>=(____solvedUntil) && manager->getNodeLen() ) {
-                // cerr << "hu\n";
-                int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
-                // cerr << "world_id=" << world_id << endl;
-
+                int last_idx=-1;
                 Matrix4d w_TM_i;
-                if(____solvedUntil > 1 && world_id == ____solvedUntil_worldid) {
+
+                if( ____solvedUntil == 0 ) {
+                    w_TM_i = manager->getNodePose( i );
+                } else if( world_id < 0 ) {
+                    last_idx = manager->nodeidx_of_world_i_ended( -world_id-1 );
+                } else if(world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==false) {
+                    last_idx = ____solvedUntil;
+                } else {
+                    // last_idx = manager->nodeidx_of_world_i_started( world_id );
+                    w_TM_i = manager->getNodePose( i );
+                }
+
+                if( last_idx >= 0 ) {
+                Matrix4d w_T_last = slam->getNodePose(last_idx );
+                Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
+                w_TM_i = w_T_last * last_M_i;}
+
+
+                #if 0
+                Matrix4d w_TM_i;
+                if(____solvedUntil > 1 && world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==false) {
                     // cerr << "A";
-                    int last_idx = ____solvedUntil-1;//TODO: if the start of world is a newer event that should use it rather than solvedUntil.
+                    int last_idx = ____solvedUntil;//TODO: if the start of world is a newer event that should use it rather than solvedUntil.
                     Matrix4d w_T_last = slam->getNodePose(last_idx );
                     Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
                     w_TM_i = w_T_last * last_M_i;
@@ -365,6 +416,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 }
 
                 // cerr << "X    " << PoseManipUtils::prettyprintMatrix4d( w_TM_i);
+                #endif
 
                 if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
@@ -501,7 +553,9 @@ int main( int argc, char ** argv)
     // std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
     std::thread th4( periodic_publish_odoms, manager, viz );
     std::thread th5( monitor_disjoint_set_datastructure, manager );
-    std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz );
+
+    opt_traj_publisher_options options;
+    std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 
 

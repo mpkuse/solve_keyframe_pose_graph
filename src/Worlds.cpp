@@ -105,16 +105,18 @@ const Matrix4d Worlds::getPoseBetweenWorlds( int m, int n ) const
     ans_n = path[ path.size() - 1 ];
     for( int h=0 ; h<path.size()-1 ; h++ )
     {
-        cout << "w" << path[h] << "__T__w" << path[h+1] << " x ";
+        // cout << "w" << path[h] << "__T__w" << path[h+1] << " x ";
 
         // Matrix4d __tmp = rel_pose_between_worlds__wb_T_wa.at( make_pair( path[h], path[h+1] ) );
         Matrix4d h_T_hp1;
         if( rel_pose_between_worlds__wb_T_wa.count( make_pair( path[h], path[h+1] ) ) > 0 ) {
             h_T_hp1 = rel_pose_between_worlds__wb_T_wa.at( make_pair( path[h], path[h+1] ) );
+            cout << "w" << path[h] << "__T__w" << path[h+1] << " x ";
         }
         else{
             if( rel_pose_between_worlds__wb_T_wa.count( make_pair( path[h+1], path[h] ) ) > 0 ) {
                 h_T_hp1 = rel_pose_between_worlds__wb_T_wa.at( make_pair( path[h+1], path[h] ) ).inverse();
+                cout << "inv( w" << path[h+1] << "__T__w" << path[h] << ") x ";
             }
             else {
                 cout << "[Worlds::getPoseBetweenWorlds/tricky-case] FATAL ERROR EXIT(582392)\n";
