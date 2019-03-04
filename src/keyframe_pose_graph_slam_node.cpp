@@ -72,7 +72,7 @@ void periodic_print_len( const NodeDataManager * manager )
 void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph * viz )
 {
     cout << "Start `periodic_publish`\n";
-    ros::Rate loop_rate(5);
+    ros::Rate loop_rate(15);
     double offset_x = 30., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
@@ -86,7 +86,8 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         jmb.clear();
 
         // collect all
-        for( int i=0 ; i<manager->getNodeLen() ; i++ )
+        // for( int i=0 ; i<manager->getNodeLen() ; i++ )
+        for( int i=manager->nodeidx_of_world_i_started(manager->n_worlds()-1) ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
             if( manager->nodePoseExists(i )  ) {
@@ -141,6 +142,10 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         }
         viz->publishNodesAsLineStrip( jmb[to_publish_key] , "latest_odometry", 0.0, 0.7, 0.0 );
 
+        // Publish Camera visual
+        Matrix4d wi_T_latest = *( jmb.at( to_publish_key ).rbegin() );
+        float c_r=0., c_g=0.7, c_b=0.;
+        viz->publishCameraVisualMarker( wi_T_latest, "odom-world##", c_r, c_g, c_b );
 
 
         #endif
@@ -323,6 +328,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
     ros::Rate loop_rate(20);
     map<int, vector<Matrix4d> > jmb;
+    vector< Vector3d > lbm; // a corrected poses. Same index as the node.
     while( ros::ok() )
     {
         // cout << "[opt_traj_publisher_colored_by_world]---\n";
@@ -334,6 +340,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         //clear map
         jmb.clear();
+        lbm.clear();
 
         // cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
         int latest_pose_worldid = -1;
@@ -372,6 +379,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     jmb[ world_id ] = vector<Matrix4d>();
 
                 jmb[ world_id ].push_back( w_T_c );
+                lbm.push_back( w_T_c.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
 
             }
@@ -405,6 +413,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     jmb[ world_id ] = vector<Matrix4d>();
 
                 jmb[ world_id ].push_back( w_TM_i );
+                lbm.push_back( w_TM_i.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
             }
 
@@ -417,16 +426,28 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         // publish jmb
         // #if 0
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+            // if( it->first < 0 ) //skip publishing kidnapped part.
+                // continue;
             string ns = "world#"+to_string( it->first );
 
             float c_r=0., c_g=0., c_b=0.;
-            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
-            int rng = it->first; //color by world id WorldID
-            #endif
+            int rng=-1;
+            if( options.line_color_style == 10 )
+                rng = it->first; //color by world id WorldID
+            else if( options.line_color_style == 12 )
+                rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+            else {
+                cout << TermColor::RED() << "opt_traj_publisher_colored_by_world ERROR. invalid option `opt_traj_publisher_options`. expected either 10 or 12.\n";
+                exit( 1 );
+            }
 
-            #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
-            int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
-            #endif
+            // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+            // int rng = it->first; //color by world id WorldID
+            // #endif
+            //
+            // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+            // int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+            // #endif
             if( rng >= 0 ) {
                 cv::Scalar color = FalseColors::randomColor( rng );
                 c_r = color[2]/255.;
@@ -441,13 +462,24 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         // Publish Camera visual
         Matrix4d wi_T_latest = *( jmb.at( latest_pose_worldid ).rbegin() );
         float c_r=0., c_g=0., c_b=0.;
-        #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
-        int rng = latest_pose_worldid;
-        #endif
+        int rng=-1;
+        if( options.line_color_style == 10 )
+            rng = latest_pose_worldid;
+        else if( options.line_color_style == 12 )
+            rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
+        else {
+            cout << TermColor::RED() << "opt_traj_publisher_colored_by_world ERROR. invalid option `opt_traj_publisher_options`. expected either 10 or 12.\n";
+            exit( 1 );
+        }
 
-        #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
-        int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
-        #endif
+
+        // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+        // int rng = latest_pose_worldid;
+        // #endif
+        //
+        // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+        // int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
+        // #endif
         if( rng >= 0 ) {
             cv::Scalar color = FalseColors::randomColor( rng );
             c_r = color[2]/255.;
@@ -455,6 +487,28 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             c_b = color[0]/255.;
         }
         viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b );
+
+
+        // Publish loop edges
+        // TODO: in the future publish intra-world loopedges in different color and interworld as different color
+        visualization_msgs::Marker linelist_marker;
+        RosMarkerUtils::init_line_marker( linelist_marker );
+        linelist_marker.ns = "loopedges_on_opt_traj"; linelist_marker.id = 0;
+        linelist_marker.color.r = 0.4;linelist_marker.color.g = 0.2;linelist_marker.color.b = 0.;linelist_marker.color.a = 1.;
+        linelist_marker.scale.x = 0.06;
+
+        int nloopedgfes = manager->getEdgeLen();
+        for( int it=0 ; it<nloopedgfes; it++ ) {
+            auto pair = manager->getEdgeIdxInfo( it );
+            int __a = pair.first;
+            int __b = pair.second;
+            Vector3d ____apose = lbm[__a];
+            Vector3d ____bpose = lbm[__b];
+
+            RosMarkerUtils::add_point_to_marker(  ____apose, linelist_marker, false );
+            RosMarkerUtils::add_point_to_marker(  ____bpose, linelist_marker, false );
+        }
+        viz->publishThisVisualMarker( linelist_marker );
 
 
         // book keeping
@@ -538,6 +592,7 @@ int main( int argc, char ** argv)
     std::thread th5( monitor_disjoint_set_datastructure, manager );
 
     opt_traj_publisher_options options;
+    options.line_color_style = 10;
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 

@@ -1857,14 +1857,17 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //-----------------------------
         //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants.
         //------------------------------
-        /*
-        int xn_worlds = manager->n_worlds();
+        std::map< int, bool > mark_as_constant;
+        // mark_as_constant[0] = true;
+        // mark_as_constant[1] = true;
         for( int ww=0 ; ww<manager->n_worlds(); ww++ ) {
+            if( mark_as_constant.count(ww) ==0  )
+                continue;
             int ww_start = manager->nodeidx_of_world_i_started( ww );
             reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
             reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
             cout << "Mark node#" << ww_start << " as constant\n";
-        }*/
+        }
 
 
         //-----------------------

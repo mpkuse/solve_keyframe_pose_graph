@@ -448,3 +448,8 @@ void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string&
     marker2.ns = ns+string("_cam_visual");
     pub_pgraph.publish( marker2 );
 }
+
+void VizPoseGraph::publishThisVisualMarker( const visualization_msgs::Marker& the_marker )
+{
+    pub_pgraph.publish( the_marker );
+}

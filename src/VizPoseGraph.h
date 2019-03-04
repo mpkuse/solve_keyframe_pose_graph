@@ -60,6 +60,7 @@ public:
     void publishSlamResidueVisual( int n ) const;
     void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b );
 
+    void publishThisVisualMarker( const visualization_msgs::Marker& the_marker ); 
 
 private:
     const NodeDataManager * manager=NULL;
