@@ -1859,7 +1859,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //------------------------------
         std::map< int, bool > mark_as_constant;
         // mark_as_constant[0] = true;
-        // mark_as_constant[1] = true;
+        mark_as_constant[1] = true;
         for( int ww=0 ; ww<manager->n_worlds(); ww++ ) {
             if( mark_as_constant.count(ww) ==0  )
                 continue;

@@ -853,7 +853,7 @@ int NodeDataManager::which_world_is_this( int i ) //given the node idx, gets the
 
 // #define __WORLD_START_ENDS___debug( msg ) msg;
 #define __WORLD_START_ENDS___debug( msg ) ;
-int NodeDataManager::nodeidx_of_world_i_started( int i )
+int NodeDataManager::nodeidx_of_world_i_started( int i ) const
 {
 
     if( i<0 )
@@ -894,7 +894,7 @@ int NodeDataManager::nodeidx_of_world_i_started( int i )
     return -4;
 }
 
-int NodeDataManager::nodeidx_of_world_i_ended( int i )
+int NodeDataManager::nodeidx_of_world_i_ended( int i ) const
 {
     // returns a large number if the world i never ended
     int n_kidnap_ends;
@@ -934,7 +934,7 @@ int NodeDataManager::nodeidx_of_world_i_ended( int i )
 
 
 
-int NodeDataManager::n_worlds()
+int NodeDataManager::n_worlds() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
     return kidnap_ends.size() + 1;

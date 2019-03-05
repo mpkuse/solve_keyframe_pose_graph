@@ -271,7 +271,53 @@ private:
 };
 
 
+// With ceres you cannot set and then unset parameter blocks as constant. So the get arround
+// to that issue is to have pose regularization. The poses that you want to keep as constant
+// (for example the 1st pose of the path), just add penalty for its change with a large weight value.
+class NodePoseRegularization
+{
+public:
+    NodePoseRegularization( const Matrix4d& _nodepose, const double _weight = 1.0 ) : nodepose( _nodepose ), weight( _weight )
+    {
 
+    }
+
+    template <typename T>
+    bool operator() ( const T* const q1, const T* const t1, T* residue_ptr ) const
+    {
+        // q1,t1 --> w_T_c1
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_1( t1 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_1( q1 );
+        Matrix<T,4,4> npose = Matrix<T,4,4>::Identity();
+        npose.topLeftCorner(3,3) = q_1.toRotationMatrix();
+        npose.col(3).topRows(3) = p_1;
+
+        // nodepose --> T
+        Matrix<T,4,4> f = nodepose.cast<float> ();
+
+        Matrix<T,4,4> delta = f.inverse() * npose ;
+        Quaternion<T> delta_q( delta.topLeftCorner(3,3) );
+
+        Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
+        residuals.block(0,0, 3,1) = T(weight) * delta.col(3).topRows(3);
+        residuals.block(3,0, 3,1) = T(weight) * T(2.0) * delta_q.vec();
+
+        return true;
+    }
+
+    // static ceres::CostFunction* Create( const Matrix4d& _observed_node_pose, const double xweight )
+    // {
+    //   return ( new ceres::AutoDiffCostFunction<NodePoseRegularization,6,4,3>
+    //     (
+    //       new NodePoseRegularization(_observed_node_pose, xweight )
+    //     )
+    //   );
+    // }
+
+private:
+    const Matrix4d& nodepose;
+    const double weight;
+};
 
 
 

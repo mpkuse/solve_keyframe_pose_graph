@@ -150,9 +150,9 @@ public:
     int n_kidnaps() const;
 
 
-    int nodeidx_of_world_i_started( int i );
-    int nodeidx_of_world_i_ended( int i );
-    int n_worlds() ;
+    int nodeidx_of_world_i_started( int i ) const;
+    int nodeidx_of_world_i_ended( int i ) const;
+    int n_worlds() const;
 
     // Give me a timestamp and I will tell you which world co-ordinate system
     // this time is.
