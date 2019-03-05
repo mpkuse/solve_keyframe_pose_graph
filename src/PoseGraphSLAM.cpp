@@ -1383,11 +1383,13 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     reint_options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     reint_options.minimizer_progress_to_stdout = false;
     reint_options.max_num_iterations = 50;
+    // reint_options.enable_fast_removal = true;
     eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
     // robust_norm = new ceres::CauchyLoss(1.0);
     robust_norm = new ceres::HuberLoss(0.1);
 
     std::map< int , std::tuple<int,int> > changes_to_setid_on_set_union; // key:= worldID, value:= (prev setID of this world, new setID of this world).
+    vector<ceres::ResidualBlockId> regularization_terms_list;
 
 
     while( reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled )
@@ -1855,19 +1857,43 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
 
         //-----------------------------
-        //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants.
+        //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
         //------------------------------
+        for( int v=0 ; v<regularization_terms_list.size() ; v++ ) {
+            reint_problem.RemoveResidualBlock( regularization_terms_list[v] );
+            cout << "Remove " << v << " th regularization term\n";
+        }
+        regularization_terms_list.clear();
+
         std::map< int, bool > mark_as_constant;
         // mark_as_constant[0] = true;
         mark_as_constant[1] = true;
         for( int ww=0 ; ww<manager->n_worlds(); ww++ ) {
-            if( mark_as_constant.count(ww) ==0  )
-                continue;
+            // if( mark_as_constant.count(ww) ==0  )
+                // continue;
+            int ww_setid = manager->getWorldsConstPtr()->find_setID_of_world_i(ww);
+            cout << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << endl;
+            if( ww_setid >= 0 && ww_setid==ww ) {
+
+
             int ww_start = manager->nodeidx_of_world_i_started( ww );
-            reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
-            reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
-            cout << "Mark node#" << ww_start << " as constant\n";
+            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
+            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
+
+            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( getNodePose(ww_start), 1.2 );
+            ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
+            regularization_terms_list.push_back( resi_id );
+
+            cout << "node#" << ww_start << " is in world#" << ww << " which has setID as " << ww_setid << endl;
+            cout << "Mark node#" << ww_start << " as constant. \n";
+            }
+            else
+                cout << "skip\n";
         }
+        cout << "Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << endl;
+
+
+
 
 
         //-----------------------

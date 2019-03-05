@@ -293,26 +293,28 @@ public:
         npose.col(3).topRows(3) = p_1;
 
         // nodepose --> T
-        Matrix<T,4,4> f = nodepose.cast<float> ();
+        Matrix<T,4,4> f = nodepose.cast<T> ();
 
         Matrix<T,4,4> delta = f.inverse() * npose ;
-        Quaternion<T> delta_q( delta.topLeftCorner(3,3) );
+        Matrix<T,3,3> R = delta.topLeftCorner(3,3);
+        Quaternion<T> delta_q( R );
+
 
         Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
         residuals.block(0,0, 3,1) = T(weight) * delta.col(3).topRows(3);
         residuals.block(3,0, 3,1) = T(weight) * T(2.0) * delta_q.vec();
-
+        
         return true;
     }
 
-    // static ceres::CostFunction* Create( const Matrix4d& _observed_node_pose, const double xweight )
-    // {
-    //   return ( new ceres::AutoDiffCostFunction<NodePoseRegularization,6,4,3>
-    //     (
-    //       new NodePoseRegularization(_observed_node_pose, xweight )
-    //     )
-    //   );
-    // }
+    static ceres::CostFunction* Create( const Matrix4d& _observed_node_pose, const double xweight )
+    {
+      return ( new ceres::AutoDiffCostFunction<NodePoseRegularization,6,4,3>
+        (
+          new NodePoseRegularization(_observed_node_pose, xweight )
+        )
+      );
+    }
 
 private:
     const Matrix4d& nodepose;
