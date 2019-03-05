@@ -40,6 +40,8 @@ class VizPoseGraph
 public:
     VizPoseGraph( const NodeDataManager* _manager, const PoseGraphSLAM* _slam ) : manager(_manager), slam(_slam){};
     void setVisualizationPublisher( const ros::Publisher& pub );
+    void setImagePublisher( const ros::Publisher& pub );
+
     void setPathPublisher( const ros::Publisher& pub ); //< TODO: removal
     void setOdometryPublisher( const ros::Publisher& pub );
 
@@ -60,7 +62,8 @@ public:
     void publishSlamResidueVisual( int n ) const;
     void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b );
 
-    void publishThisVisualMarker( const visualization_msgs::Marker& the_marker ); 
+    void publishThisVisualMarker( const visualization_msgs::Marker& the_marker );
+    void publishImage( const cv::Mat& im );
 
 private:
     const NodeDataManager * manager=NULL;
@@ -68,6 +71,7 @@ private:
 
     // Publish Marker
     ros::Publisher pub_pgraph; //< Marker
+    ros::Publisher pub_image; //< publishes image.
     ros::Publisher pub_path_opt; //< Path, TODO: Removal
     ros::Publisher pub_odometry_opt; // nav_msgs::Odometry //TODO Removal
 };

@@ -245,7 +245,7 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
 }
 
 
-void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
+void monitor_disjoint_set_datastructure( const NodeDataManager * manager, const VizPoseGraph * viz )
 {
     ros::Rate loop_rate(1);
 
@@ -253,9 +253,15 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager )
     while( ros::ok() )
     {
         cv::Mat im_disp;
-        manager->getWorldsConstPtr()->disjoint_set_status_image(im_disp);
+        // manager->getWorldsConstPtr()->disjoint_set_status_image(im_disp); // will get bubles as well as the text
+        manager->getWorldsConstPtr()->disjoint_set_status_image(im_disp, true, false); // only bubles
+
+        #if 1 // set this to zero to imshow the image. helpful for debugging.
+        viz->publishImage( im_disp );
+        #else
         cv::imshow( "disjoint_set_status_image" , im_disp );
         cv::waitKey(30);
+        #endif
 
         loop_rate.sleep();
     }
@@ -556,6 +562,11 @@ int main( int argc, char ** argv)
     ROS_INFO( "Publish to %s", marker_topic.c_str() );
     ros::Publisher pub = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
 
+    //--- Image ---//
+    string im_topic = string( "viz/disjoint_set_status_image");
+    ROS_INFO( "Publish Image to %s", im_topic.c_str() );
+    ros::Publisher pub_im = nh.advertise<sensor_msgs::Image>( im_topic , 1000 );
+
 
     //--- Optimzied Path Publisher ---//
     string opt_path_topic = string( "opt_path");
@@ -583,13 +594,14 @@ int main( int argc, char ** argv)
     // another class for viz.
     VizPoseGraph * viz = new VizPoseGraph( manager, slam );
     viz->setVisualizationPublisher( pub );
+    viz->setImagePublisher( pub_im );
     viz->setPathPublisher( pub_path );
     viz->setOdometryPublisher( pub_odometry_opt );
 
     // setup manager publishers threads - adhoc
     // std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
     std::thread th4( periodic_publish_odoms, manager, viz );
-    std::thread th5( monitor_disjoint_set_datastructure, manager );
+    std::thread th5( monitor_disjoint_set_datastructure, manager, viz );
 
     opt_traj_publisher_options options;
     options.line_color_style = 10;

@@ -7,6 +7,14 @@ void VizPoseGraph::setVisualizationPublisher( const ros::Publisher& pub )
   pub_pgraph = pub;
 }
 
+void VizPoseGraph::setImagePublisher( const ros::Publisher& pub )
+{
+
+  pub_image = pub;
+}
+
+
+
 // TODO removal
 void VizPoseGraph::setPathPublisher( const ros::Publisher& pub )
 {
@@ -452,4 +460,11 @@ void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string&
 void VizPoseGraph::publishThisVisualMarker( const visualization_msgs::Marker& the_marker )
 {
     pub_pgraph.publish( the_marker );
+}
+
+
+void VizPoseGraph::publishImage( const cv::Mat& im )
+{
+    sensor_msgs::ImagePtr msg = cv_bridge::CvImage( std_msgs::Header(), "bgr8", im ).toImageMsg();
+    pub_image.publish( msg );
 }

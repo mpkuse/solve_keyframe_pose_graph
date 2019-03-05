@@ -1880,7 +1880,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
             // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
 
-            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( getNodePose(ww_start), 1.2 );
+            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( getNodePose(ww_start), 2.3 );
             ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
             regularization_terms_list.push_back( resi_id );
 
