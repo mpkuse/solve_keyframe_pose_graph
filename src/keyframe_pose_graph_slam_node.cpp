@@ -73,9 +73,11 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(15);
-    double offset_x = 30., offset_y=0., offset_z=0.;
+    // double offset_x = 30., offset_y=0., offset_z=0.;
+    double offset_x = 0., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
+    bool published_axis = false;
     while( ros::ok() )
     {
         if( manager->getNodeLen() == 0 ) {
@@ -132,9 +134,9 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         #endif
 
 
-        // only publish the latest odometry. Set this to zero if you dont need this.
-        #if 1
-        int to_publish_key = -1;
+
+        #if 1// only publish the latest odometry. Set this to zero if you dont need this.
+        int to_publish_key = -1; //lets the largest key value
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
 
             if( it->first > to_publish_key &&  it->first >=0 )
@@ -149,6 +151,16 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 
 
         #endif
+
+
+
+        if( published_axis==false || rand() % 100 == 0 ) {
+        // Publish Axis - publish infrequently
+        Matrix4d odm_axis_pose = Matrix4d::Identity();
+        odm_axis_pose(0,3) += offset_x; odm_axis_pose(1,3) += offset_y; odm_axis_pose(2,3) += offset_z;
+        viz->publishXYZAxis( odm_axis_pose, "odom-axis", 0  );
+        published_axis = true;
+        }
 
 
         loop_rate.sleep();
@@ -334,7 +346,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
     ros::Rate loop_rate(20);
     map<int, vector<Matrix4d> > jmb;
-    vector< Vector3d > lbm; // a corrected poses. Same index as the node.
+    vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
     while( ros::ok() )
     {
         // cout << "[opt_traj_publisher_colored_by_world]---\n";
@@ -361,7 +373,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
 
             // i>=0 and i<solvedUntil()
-            if( i>=0 && i< ____solvedUntil ) {
+            if( i>=0 && i<= ____solvedUntil ) {
                 Matrix4d w_T_c_optimized, w_T_c;
 
                 // cerr << "world_id=" << world_id << "   ";
@@ -393,19 +405,36 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
             // i>solvedUntil() < manager->getNodeLen() only odometry available here.
 
-            if( i>=(____solvedUntil) && manager->getNodeLen() ) {
+            if( i>(____solvedUntil)  ) {
                 int last_idx=-1;
                 Matrix4d w_TM_i;
 
+                /*
                 if( ____solvedUntil == 0 ) {
                     w_TM_i = manager->getNodePose( i );
                 } else if( world_id < 0 ) {
                     last_idx = manager->nodeidx_of_world_i_ended( -world_id-1 );
                 } else if(world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==false) {
                     last_idx = ____solvedUntil;
+                }
+                else if(world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==true) {
+                    last_idx = ____solvedUntil;
                 } else {
                     // last_idx = manager->nodeidx_of_world_i_started( world_id );
                     w_TM_i = manager->getNodePose( i );
+                }
+                */
+
+                if( ____solvedUntil == 0 ) {
+                    w_TM_i = manager->getNodePose( i );
+                } else {
+                    if( world_id >= 0 && ____solvedUntil_worldid == world_id )
+                        last_idx = ____solvedUntil;
+                    else if( world_id >=0 && ____solvedUntil_worldid != world_id  )
+                        w_TM_i = manager->getNodePose( i );
+                    else
+                        last_idx = ____solvedUntil;
+
                 }
 
                 if( last_idx >= 0 ) {

@@ -57,4 +57,10 @@ public:
     static void add_point_to_marker( const Vector4d& X, visualization_msgs::Marker& marker, bool clear_prev_points=true );
     static void add_points_to_marker( const MatrixXd& X, visualization_msgs::Marker& marker, bool clear_prev_points=true ); //X : 3xN or 4xN.
 
+    ////////////// Add colors to individual points ///////////////
+    static void add_colors_to_marker( const Vector3d& color_rgb, visualization_msgs::Marker& marker, bool clear_prev_colors );
+    static void add_colors_to_marker( float c_r, float c_g, float c_b, visualization_msgs::Marker& marker, bool clear_prev_colors );
+    static void add_colors_to_marker( const MatrixXd& X, visualization_msgs::Marker& marker, bool clear_prev_colors );
+
+
 };

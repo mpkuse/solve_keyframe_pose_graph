@@ -314,3 +314,54 @@ void RosMarkerUtils::add_points_to_marker( const MatrixXd& X, visualization_msgs
         marker.points.push_back( pt );
     }
 }
+
+
+void RosMarkerUtils::add_colors_to_marker( const Vector3d& color_rgb, visualization_msgs::Marker& marker, bool clear_prev_colors )
+{
+    assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
+    // geometry_msgs::Point pt;
+    std_msgs::ColorRGBA pt_color;
+
+    if( clear_prev_colors )
+        marker.colors.clear();
+
+
+
+        pt_color.r = color_rgb(0); pt_color.g = color_rgb(1); pt_color.b = color_rgb(2); pt_color.a = 1.0;
+        marker.colors.push_back( pt_color );
+
+}
+
+void RosMarkerUtils::add_colors_to_marker( float c_r, float c_g, float c_b, visualization_msgs::Marker& marker, bool clear_prev_colors )
+{
+    assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
+    // geometry_msgs::Point pt;
+    std_msgs::ColorRGBA pt_color;
+
+    if( clear_prev_colors )
+        marker.colors.clear();
+
+
+
+        pt_color.r = c_r; pt_color.g = c_g; pt_color.b = c_b; pt_color.a = 1.0;
+        marker.colors.push_back( pt_color );
+
+}
+
+
+
+void RosMarkerUtils::add_colors_to_marker( const MatrixXd& X, visualization_msgs::Marker& marker, bool clear_prev_colors )
+{
+    assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
+    // geometry_msgs::Point pt;
+    std_msgs::ColorRGBA pt_color;
+
+    if( clear_prev_colors )
+        marker.colors.clear();
+
+
+    for( int i=0 ; i<X.cols() ; i++ ) {
+        pt_color.r = X(0,i); pt_color.g = X(1,i); pt_color.b = X(2,i); pt_color.a = 1.0;
+        marker.colors.push_back( pt_color );
+    }
+}

@@ -457,6 +457,38 @@ void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string&
     pub_pgraph.publish( marker2 );
 }
 
+void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id )
+{
+    visualization_msgs::Marker axis;
+    RosMarkerUtils::init_line_marker( axis );
+    axis.id = 0;
+    axis.ns = ns.c_str();
+    axis.scale.x = 0.2;
+
+
+    // Add pts
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, true );
+    RosMarkerUtils::add_point_to_marker( 1,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,1,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,1, axis, false );
+
+    // Add colors to each pt
+    RosMarkerUtils::add_colors_to_marker( 1.0,0,0, axis, true );
+    RosMarkerUtils::add_colors_to_marker( 1.0,0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,1.0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,1.0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,0,1.0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,0,1.0, axis, false );
+
+
+
+    RosMarkerUtils::setpose_to_marker( wT_axis, axis );
+    pub_pgraph.publish( axis );
+
+}
+
 void VizPoseGraph::publishThisVisualMarker( const visualization_msgs::Marker& the_marker )
 {
     pub_pgraph.publish( the_marker );

@@ -62,6 +62,7 @@ public:
     void publishSlamResidueVisual( int n ) const;
     void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b );
 
+    void publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id );
     void publishThisVisualMarker( const visualization_msgs::Marker& the_marker );
     void publishImage( const cv::Mat& im );
 

@@ -277,7 +277,7 @@ private:
 class NodePoseRegularization
 {
 public:
-    NodePoseRegularization( const Matrix4d& _nodepose, const double _weight = 1.0 ) : nodepose( _nodepose ), weight( _weight )
+    NodePoseRegularization( const Matrix4d _nodepose, const double _weight = 1.0 ) : nodepose( _nodepose ), weight( _weight )
     {
 
     }
@@ -303,11 +303,11 @@ public:
         Eigen::Map<Matrix<T,6,1> > residuals( residue_ptr );
         residuals.block(0,0, 3,1) = T(weight) * delta.col(3).topRows(3);
         residuals.block(3,0, 3,1) = T(weight) * T(2.0) * delta_q.vec();
-        
+
         return true;
     }
 
-    static ceres::CostFunction* Create( const Matrix4d& _observed_node_pose, const double xweight )
+    static ceres::CostFunction* Create( const Matrix4d _observed_node_pose, const double xweight )
     {
       return ( new ceres::AutoDiffCostFunction<NodePoseRegularization,6,4,3>
         (
@@ -317,7 +317,7 @@ public:
     }
 
 private:
-    const Matrix4d& nodepose;
+    const Matrix4d nodepose;
     const double weight;
 };
 

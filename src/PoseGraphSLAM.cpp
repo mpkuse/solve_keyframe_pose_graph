@@ -1354,8 +1354,8 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 // #define __reint_allocation_cout(msg)  msg;
 #define __reint_allocation_cout(msg)  ;
 
-// #define __reint_odom_cout(msg) msg;
-#define __reint_odom_cout(msg) ;
+#define __reint_odom_cout(msg) msg;
+// #define __reint_odom_cout(msg) ;
 
 
 
@@ -1382,7 +1382,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     ceres::Solver::Summary reint_summary;
     reint_options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     reint_options.minimizer_progress_to_stdout = false;
-    reint_options.max_num_iterations = 50;
+    reint_options.max_num_iterations = 10;
     // reint_options.enable_fast_removal = true;
     eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
     // robust_norm = new ceres::CauchyLoss(1.0);
@@ -1859,6 +1859,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //-----------------------------
         //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
         //------------------------------
+        #if 1
         for( int v=0 ; v<regularization_terms_list.size() ; v++ ) {
             reint_problem.RemoveResidualBlock( regularization_terms_list[v] );
             cout << "Remove " << v << " th regularization term\n";
@@ -1868,30 +1869,36 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         std::map< int, bool > mark_as_constant;
         // mark_as_constant[0] = true;
         mark_as_constant[1] = true;
+        cout << "There are " << manager->n_worlds() << " worlds. Loop through each world to get its start node\n";
+        cout << "Number of opt_nodes = " << this->n_opt_variables() << endl;
         for( int ww=0 ; ww<manager->n_worlds(); ww++ ) {
             // if( mark_as_constant.count(ww) ==0  )
                 // continue;
             int ww_setid = manager->getWorldsConstPtr()->find_setID_of_world_i(ww);
-            cout << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << endl;
-            if( ww_setid >= 0 && ww_setid==ww ) {
-
-
             int ww_start = manager->nodeidx_of_world_i_started( ww );
-            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
-            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
-
-            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( getNodePose(ww_start), 2.3 );
-            ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
-            regularization_terms_list.push_back( resi_id );
+            cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << TermColor::RESET() << endl;
+            if( ww_setid >= 0 && ww_setid==ww ) {
 
             cout << "node#" << ww_start << " is in world#" << ww << " which has setID as " << ww_setid << endl;
             cout << "Mark node#" << ww_start << " as constant. \n";
+
+            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
+            // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
+
+            // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
+            Matrix4d ww_start_pose = this->getNodePose(ww_start);
+            cout << "ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl;
+            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, 3.3 );
+            ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
+            regularization_terms_list.push_back( resi_id );
+
+
             }
             else
                 cout << "skip\n";
         }
         cout << "Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << endl;
-
+        #endif
 
 
 

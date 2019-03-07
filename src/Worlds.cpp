@@ -310,11 +310,15 @@ void Worlds::disjoint_set_status_image(cv::Mat& im_disp, bool enable_bubbles, bo
     if( enable_bubbles ) {
         int uu = n_worlds(); //disjoint_set.element_count();
         // circles
+        cv::putText( im_disp, "Worlds:", cv::Point(15, 15), cv::FONT_HERSHEY_SIMPLEX,
+                0.4, cv::Scalar(255,255,255), 1.5 );
+        cv::putText( im_disp, "SetIDs of Worlds:", cv::Point(15, 45), cv::FONT_HERSHEY_SIMPLEX,
+                0.4, cv::Scalar(255,255,255), 1.5 );
         for( int i=0 ; i<uu; i++ ) {
             // World Colors
             cv::Scalar color = FalseColors::randomColor( i );
             // cout << color << endl;
-            cv::Point pt = cv::Point(20*i+15, 15);
+            cv::Point pt = cv::Point(20*i+15, 25);
             cv::circle( im_disp, pt, 10, color, -1 );
             cv::putText( im_disp, to_string(i), pt, cv::FONT_HERSHEY_SIMPLEX,
                     0.4, cv::Scalar(255,255,255), 1.5 );
@@ -323,7 +327,7 @@ void Worlds::disjoint_set_status_image(cv::Mat& im_disp, bool enable_bubbles, bo
             // Set Colors
             int setId =  find_setID_of_world_i( i );
             color = FalseColors::randomColor( setId );
-            pt = cv::Point(20*i+15, 45);
+            pt = cv::Point(20*i+15, 55);
             cv::circle( im_disp, pt, 10, color, -1 );
             cv::putText( im_disp, to_string(setId), pt, cv::FONT_HERSHEY_SIMPLEX,
                     0.4, cv::Scalar(255,255,255), 1.5 );
