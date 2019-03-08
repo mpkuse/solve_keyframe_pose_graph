@@ -73,8 +73,8 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(15);
-    // double offset_x = 30., offset_y=0., offset_z=0.;
-    double offset_x = 0., offset_y=0., offset_z=0.;
+    double offset_x = 30., offset_y=0., offset_z=0.;
+    // double offset_x = 0., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
     bool published_axis = false;
@@ -108,7 +108,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 
         // Publish all the odometries (unregistered) and also plot the loop edges.
         // make the follow to 1 if you need this.
-        #if 1
+        #if 0
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
             string ns = "odom-world#"+to_string( it->first );
 
@@ -135,7 +135,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 
 
 
-        #if 0// only publish the latest odometry. Set this to zero if you dont need this.
+        #if 1// only publish the latest odometry. Set this to zero if you dont need this.
         int to_publish_key = -1; //lets the largest key value
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
 
@@ -435,6 +435,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     else if( world_id < 0 ) {
                         // last_idx = ____solvedUntil;
                         last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
+                        // cout << "last_idx=" << last_idx << endl;
                     } else {
                         cout << "opt_traj_publisher_colored_by_world impossivle";
                         exit(2);
@@ -443,9 +444,15 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 }
 
                 if( last_idx >= 0 ) {
-                Matrix4d w_T_last = slam->getNodePose(last_idx );
-                Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
-                w_TM_i = w_T_last * last_M_i;}
+                    Matrix4d w_T_last;
+                    if( slam->nodePoseExists(last_idx) )
+                        w_T_last = slam->getNodePose(last_idx );
+                    else
+                        w_T_last = manager->getNodePose(last_idx );
+
+                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
+                    w_TM_i = w_T_last * last_M_i;
+                }
 
 
 

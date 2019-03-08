@@ -1899,14 +1899,13 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             regularization_terms_list.push_back( resi_id );
             }
 
-
-
             }
             else {
                 __reint_node_regularization_info( cout << "skip\n"; )
             }
 
 
+            #if 0
             // check if this world is in change set aka `changes_to_setid_on_set_union`. Add regularization if not in changeset
             if( changes_to_setid_on_set_union.count( ww ) > 0  ) {
                 __reint_node_regularization_info( cout << "World#" << ww << " is in `changes_to_setid_on_set_union`. This indicates it was changed.So no regularization needed\n"; )
@@ -1922,6 +1921,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                     regularization_terms_list.push_back( resi_id );
                 }
             }
+            #endif
 
         }
         ___trigger_header( cout << "\n[ETA Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << "   done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl; )
