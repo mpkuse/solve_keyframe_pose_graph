@@ -73,8 +73,8 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(15);
-    double offset_x = 30., offset_y=0., offset_z=0.;
-    // double offset_x = 0., offset_y=0., offset_z=0.;
+    // double offset_x = 30., offset_y=0., offset_z=0.;
+    double offset_x = 0., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
     bool published_axis = false;
@@ -108,7 +108,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 
         // Publish all the odometries (unregistered) and also plot the loop edges.
         // make the follow to 1 if you need this.
-        #if 0
+        #if 1
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
             string ns = "odom-world#"+to_string( it->first );
 
@@ -130,12 +130,12 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
             // }
 
         }
-        viz->publishLastNEdges( -1 );
+        // viz->publishLastNEdges( -1 );
         #endif
 
 
 
-        #if 1// only publish the latest odometry. Set this to zero if you dont need this.
+        #if 0// only publish the latest odometry. Set this to zero if you dont need this.
         int to_publish_key = -1; //lets the largest key value
         for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
 
@@ -428,12 +428,17 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 if( ____solvedUntil == 0 ) {
                     w_TM_i = manager->getNodePose( i );
                 } else {
-                    if( world_id >= 0 && ____solvedUntil_worldid == world_id )
-                        last_idx = ____solvedUntil;
-                    else if( world_id >=0 && ____solvedUntil_worldid != world_id  )
-                        w_TM_i = manager->getNodePose( i );
-                    else
-                        last_idx = ____solvedUntil;
+                    if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
+                        last_idx = ____solvedUntil;}
+                    else if( world_id >=0 && ____solvedUntil_worldid != world_id  ) {
+                        w_TM_i = manager->getNodePose( i );}
+                    else if( world_id < 0 ) {
+                        // last_idx = ____solvedUntil;
+                        last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
+                    } else {
+                        cout << "opt_traj_publisher_colored_by_world impossivle";
+                        exit(2);
+                    }
 
                 }
 

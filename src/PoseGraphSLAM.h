@@ -277,7 +277,7 @@ private:
 class NodePoseRegularization
 {
 public:
-    NodePoseRegularization( const Matrix4d _nodepose, const double _weight = 1.0 ) : nodepose( _nodepose ), weight( _weight )
+    NodePoseRegularization( const Matrix4d _nodepose, const double _weight ) : nodepose( _nodepose ), weight( _weight )
     {
 
     }

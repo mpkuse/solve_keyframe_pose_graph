@@ -1361,16 +1361,16 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 #define __reinit_loopedge_cout( msg ) ;
 
 
-// #define __reint_gueses_short_info(msg) msg;
-#define __reint_gueses_short_info(msg) ;
+#define __reint_gueses_short_info(msg) msg;
+// #define __reint_gueses_short_info(msg) ;
 
 
 // Print info on node regularization. I use node regularization to set
 // the start of each worlds as constant. You can tune this as need be.
 // The reason I do not use ceres::SetParameterBlockConstant() is that it cannot be
 // set to not constant which hinders when the initial guess moves.
-// #define __reint_node_regularization_info( msg ) msg;
-#define __reint_node_regularization_info( msg ) ;
+#define __reint_node_regularization_info( msg ) msg;
+// #define __reint_node_regularization_info( msg ) ;
 
 
 // Print Ceres Brief Report and other info on solving
@@ -1410,7 +1410,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     // robust_norm = new ceres::CauchyLoss(1.0);
     robust_norm = new ceres::HuberLoss(0.1);
 
-    std::map< int , std::tuple<int,int> > changes_to_setid_on_set_union; // key:= worldID, value:= (prev setID of this world, new setID of this world).
+    //==> key:= worldID, value:= (prev setID of this world, new setID of this world).
+    std::map< int , std::tuple<int,int> > changes_to_setid_on_set_union;
     vector<ceres::ResidualBlockId> regularization_terms_list;
 
 
@@ -1421,10 +1422,15 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         int loopedge_len = manager->getEdgeLen();
 
         ___trigger_header(
-        cout << "---\n";
-        cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << "\t\t";
-        cout << "prev_node_len=" << prev_node_len << "\tprev_loopedge_len=" << prev_loopedge_len << endl;
-        cout << "\tso total_new_loopedges=" << loopedge_len - prev_loopedge_len << endl;
+        // cout << "---\n";
+        // cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << "\t\t";
+        // cout << "prev_node_len=" << prev_node_len << "\tprev_loopedge_len=" << prev_loopedge_len << endl;
+        // cout << "\tso total_new_loopedges=" << loopedge_len - prev_loopedge_len << endl;
+
+        cout << "---";
+        cout << "node_len=(" << prev_node_len << "  to  " << node_len << ")\t";
+        cout << "loopedge_len=(" << prev_loopedge_len << " to " << prev_loopedge_len << ")\t";
+        cout << endl;
         )
 
         //--- If no new loop edges sleep again!
@@ -1841,7 +1847,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
 
         }
-        changes_to_setid_on_set_union.clear(); //< this is important to clear. When the setID changes (upon union_sets), this map is filled in to indicate the changes. The node initialization uses this to selectively reinitialize old node.
+
         ___trigger_header( cout << "\n[ETA initial_guesses] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl; )
 
 
@@ -1849,6 +1855,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //  -5- Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
         //------------------------------
         #if 1
+        eta.tic();
         for( int v=0 ; v<regularization_terms_list.size() ; v++ ) {
             reint_problem.RemoveResidualBlock( regularization_terms_list[v] );
             __reint_node_regularization_info( cout << "Remove " << v << " th regularization term\n"; )
@@ -1868,10 +1875,10 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                 // continue;
             int ww_setid = manager->getWorldsConstPtr()->find_setID_of_world_i(ww);
             int ww_start = manager->nodeidx_of_world_i_started( ww );
-            __reint_node_regularization_info( cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << TermColor::RESET() << endl; )
-            if( (ww_setid >= 0 && ww_setid==ww)  ) {
-
-
+            int ww_end = manager->nodeidx_of_world_i_ended( ww );
+            __reint_node_regularization_info( cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << " ww_end=" << ww_end << TermColor::RESET() << endl; )
+            if( (ww_setid >= 0 && ww_setid==ww)  )
+            {
             __reint_node_regularization_info( cout << "Mark node#" << ww_start << " as constant. \n"; )
             reg_debug_info += "Mark node#" + to_string(ww_start) + " as constant \n";
 
@@ -1880,14 +1887,17 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
             // Functionally similar to marking it as constant
+            double regularization_weight = log( 1+ww_end - ww_start )/2.;
+
+            for( int s=0; s<2 ; s++ )
             {
-            Matrix4d ww_start_pose = this->getNodePose(ww_start);
-            __reint_node_regularization_info( cout << "ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl; )
-            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, 1.3 );
-            ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
+            __reint_node_regularization_info( cout << "s="<< s << " "; )
+            Matrix4d ww_start_pose = this->getNodePose(ww_start+s);
+            __reint_node_regularization_info( cout << "regularization_weight=" << regularization_weight << "   ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl; )
+            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, regularization_weight );
+            ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start+s), get_raw_ptr_to_opt_variable_t(ww_start+s) );
             regularization_terms_list.push_back( resi_id );
             }
-
 
 
 
@@ -1895,13 +1905,31 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             else {
                 __reint_node_regularization_info( cout << "skip\n"; )
             }
+
+
+            // check if this world is in change set aka `changes_to_setid_on_set_union`. Add regularization if not in changeset
+            if( changes_to_setid_on_set_union.count( ww ) > 0  ) {
+                __reint_node_regularization_info( cout << "World#" << ww << " is in `changes_to_setid_on_set_union`. This indicates it was changed.So no regularization needed\n"; )
+            }
+            else {
+                if( ww == manager->n_worlds()-1 ) // dont add regularization for current world
+                    continue;
+                __reint_node_regularization_info( cout << "Add regularization to each node of world#" << ww << endl; )
+                for( int q=ww_start ; q<=ww_end ; q++ ) {
+                    Matrix4d ww_start_pose = this->getNodePose(q);
+                    ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, 1.0 );
+                    ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(q), get_raw_ptr_to_opt_variable_t(q) );
+                    regularization_terms_list.push_back( resi_id );
+                }
+            }
+
         }
-        ___trigger_header( cout << "Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << endl; )
+        ___trigger_header( cout << "\n[ETA Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << "   done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl; )
         ___trigger_header( cout << "Debug Info: " << reg_debug_info << "Done with debug info\n"; )
         #endif
 
 
-
+        changes_to_setid_on_set_union.clear(); //< this is important to clear. When the setID changes (upon union_sets), this map is filled in to indicate the changes. The node initialization uses this to selectively reinitialize old node.
 
         //-----------------------
         //-6- ceres::Solve()
