@@ -73,8 +73,8 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
 {
     cout << "Start `periodic_publish`\n";
     ros::Rate loop_rate(15);
-    // double offset_x = 30., offset_y=0., offset_z=0.;
-    double offset_x = 0., offset_y=0., offset_z=0.;
+    double offset_x = 30., offset_y=0., offset_z=0.;
+    // double offset_x = 0., offset_y=0., offset_z=0.;
 
     map<int, vector<Matrix4d> > jmb;
     bool published_axis = false;
@@ -259,7 +259,7 @@ void periodic_publish_optimized_poses_smart( const NodeDataManager * manager, co
 
 void monitor_disjoint_set_datastructure( const NodeDataManager * manager, const VizPoseGraph * viz )
 {
-    ros::Rate loop_rate(1);
+    ros::Rate loop_rate(0.5);
 
     #if 1
     while( ros::ok() )

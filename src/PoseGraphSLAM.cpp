@@ -1354,13 +1354,35 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 // #define __reint_allocation_cout(msg)  msg;
 #define __reint_allocation_cout(msg)  ;
 
-#define __reint_odom_cout(msg) msg;
-// #define __reint_odom_cout(msg) ;
+// #define __reint_odom_cout(msg) msg;
+#define __reint_odom_cout(msg) ;
+
+// #define __reinit_loopedge_cout( msg ) msg;
+#define __reinit_loopedge_cout( msg ) ;
 
 
+// #define __reint_gueses_short_info(msg) msg;
+#define __reint_gueses_short_info(msg) ;
 
-// #define __reint_gueses(msg) msg;
-#define __reint_gueses(msg) ;
+
+// Print info on node regularization. I use node regularization to set
+// the start of each worlds as constant. You can tune this as need be.
+// The reason I do not use ceres::SetParameterBlockConstant() is that it cannot be
+// set to not constant which hinders when the initial guess moves.
+// #define __reint_node_regularization_info( msg ) msg;
+#define __reint_node_regularization_info( msg ) ;
+
+
+// Print Ceres Brief Report and other info on solving
+// #define __reint_ceres_solve_info( msg ) msg;
+#define __reint_ceres_solve_info( msg ) ;
+
+
+// This thread wakes up when there are new loopedges. This flag controls the printing on trigger.
+// When debugging you want to keep the headers 'on'.
+#define ___trigger_header( msg ) msg;
+// #define ___trigger_header( msg ) ;
+
 void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 {
     cout << "#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#\n";
@@ -1397,15 +1419,18 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //--- Header info at start of every wakeup
         int node_len = manager->getNodeLen();
         int loopedge_len = manager->getEdgeLen();
+
+        ___trigger_header(
         cout << "---\n";
         cout << "node_len=" << node_len << "\tloopedge_len=" << loopedge_len << "\t\t";
         cout << "prev_node_len=" << prev_node_len << "\tprev_loopedge_len=" << prev_loopedge_len << endl;
         cout << "\tso total_new_loopedges=" << loopedge_len - prev_loopedge_len << endl;
+        )
 
         //--- If no new loop edges sleep again!
         if( prev_loopedge_len == loopedge_len ) {
             prev_loopedge_len = loopedge_len;
-            cout << "No new loop edge, sleep again!\n";
+            ___trigger_header( cout << "No new loop edge, sleep again!\n"; )
             reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 0;
             loop_rate.sleep();
             continue;
@@ -1418,10 +1443,11 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             continue;
         }
 
-
+        ___trigger_header(
         cout << TermColor::iMAGENTA() << "#@#@#@++#@#@#@++\n#@#@#@++ TRIGGERED " << trigger_id++ << "#@#@#@++\n#@#@#@++#@#@#@++\n" << TermColor::RESET();
         print_worlds_info( 0 );
         cout << "<=========== n_opt_variables() =========>" << n_opt_variables() << endl;
+        )
 
 
         //--- Create and Solve the problem
@@ -1435,6 +1461,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //----------------------------------
 
         int __new_node_allocations = 0;
+        ___trigger_header( cout << "\n[New Opt Variables Allocation starts] for( yp=n_opt_variables()=" << n_opt_variables()<< " ; yp< node_len="<< node_len <<  " ; yp++) "<< endl; )
         for( int yp=n_opt_variables() ; yp< node_len ; yp++ ) {
             allocate_and_append_new_opt_variable_withpose( Matrix4d::Identity() );
             __reint_allocation_cout( cout << "++  allocate_and_append_new_opt_variable_withpose, after allocation size({u})=" << n_opt_variables() << endl; )
@@ -1447,6 +1474,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         }
 
         int __new_opt_switch_allocations = 0;
+        ___trigger_header( cout << "\n[New Switch Variables per edges Allocation starts] for( yp=n_opt_switch()=" << n_opt_switch() << " ; yp< loopedge_len="<< loopedge_len << " ; yp++ )\n"; )
         for( int yp=n_opt_switch() ; yp< loopedge_len ; yp++ ) {
             allocate_and_append_new_edge_switch_var();
             __reint_allocation_cout( cout << "+++ allocate_and_append_new_edge_switch_var, after allocation size({u})=" << n_opt_switch() << endl; )
@@ -1457,7 +1485,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
         }
 
-        cout << "[ETA New Allocations] __new_node_allocations="<<__new_node_allocations << "  " << "__new_opt_switch_allocations=" << __new_opt_switch_allocations << endl;
+        ___trigger_header( cout << "[ETA New Allocations] __new_node_allocations="<<__new_node_allocations << "  " << "__new_opt_switch_allocations=" << __new_opt_switch_allocations << endl; )
 
 
         //-----------------------
@@ -1467,7 +1495,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //-2- Loop edges (inter world)
         //-----------------------
         eta.tic();
-        cout << "\n[Loop Edges Residues starts] for( e=" << prev_loopedge_len <<"; e< "<< loopedge_len << "; e++) " << endl;
+        ___trigger_header( cout << "\n[Loop Edges Residues starts] for( e=" << prev_loopedge_len <<"; e< "<< loopedge_len << "; e++) " << endl; )
         // for( int e=0 ; e<loopedge_len ; e++ ) {
         for( int e=prev_loopedge_len ; e<loopedge_len ; e++ ) {
             MatrixXd bTa = manager->getEdgePose(e); //< This is the edge's observed pose, as received in the edge-message
@@ -1486,11 +1514,14 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             bool s1 = (__a_world_is == __b_world_is );
             bool s2 = (__setid_of_world_A == __setid_of_world_B );
 
+            __reinit_loopedge_cout(
             if( s1 && s2 ) cout << "";
             if( !s1 && s2 ) cout << TermColor::CYAN();
             if( s1 && !s2 ) cout << TermColor::BLUE();
             if( !s1 && !s2 ) cout << TermColor::MAGENTA();
+            )
 
+            __reinit_loopedge_cout(
             cout << "#e=" << e;
             cout << "\t(a,b)==" << paur.first << "<-->" << paur.second << "   weight=" << std::setprecision(3) << weight;
             cout << " bTa(observed)="  << PoseManipUtils::prettyprintMatrix4d(bTa);
@@ -1503,16 +1534,16 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             cout <<   "world#" << __b_world_is << " is in setID=" << __setid_of_world_B << "\n" ;
             // manager->getWorldsPtr()->print_summary();
             cout << TermColor::RESET();
-
+            )
 
             if(  __a_world_is < 0 || __b_world_is < 0 ) {
-                cout << "either of the worlds is a kidnapped world (negative id). ignore this edge\n";
+                __reinit_loopedge_cout( cout << "either of the worlds is a kidnapped world (negative id). ignore this edge\n"; )
                 continue;
             }
 
             if( __a_world_is == __b_world_is ) // Intra World
             {
-                cout << "This is intra-world loop edge.\n";
+                __reinit_loopedge_cout( cout << "This is intra-world loop edge.\n"; )
             }
             else { //Inter World
                 // calculate the relative transforms between the two worlds if you already do not know.
@@ -1520,14 +1551,18 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                 if( manager->getWorldsPtr()->is_exist(__b_world_is,__a_world_is) ) {
                     auto rel_wb_T_wa = manager->getWorldsPtr()->getPoseBetweenWorlds( __b_world_is, __a_world_is );
+                    __reinit_loopedge_cout(
                     cout << "I already know the relative transforms between the 2 worlds, ";
                     // cout << "wa="<< __a_world_is << ";wb=" << __b_world_is;
                     cout << " wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(rel_wb_T_wa) << TermColor::RESET() << endl;
+                    )
                 }
                 else {
 
-
+                    __reinit_loopedge_cout(
                     cout << TermColor::iWHITE() << "I DONOT know the relative transforms between the 2 world, wa= "<< __a_world_is << " ; wb=" << __b_world_is << " \n" << TermColor::RESET();
+
+                    )
                     // compute the relative transforms between the 2 worlds
                     Matrix4d wa_T_a = this->getNodePose( _a );
                     Matrix4d wb_T_b = this->getNodePose( _b );
@@ -1535,37 +1570,51 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                     Matrix4d wb_T_a = wb_T_b * b_T_a_observed;
                     Matrix4d wb_T_wa = wb_T_a * wa_T_a.inverse();
+                    __reinit_loopedge_cout(
                     cout << "I just computed the rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << TermColor::RESET() << endl;
+                    )
 
                     std::map<int,int> mipmap_before_union, mipmap_after_union;
+                    __reinit_loopedge_cout(
                     cout << "CURRENT STATUS OF WORLDS (disjoint set) before:\n";
+
                     manager->getWorldsPtr()->print_summary();
+                    )
                     manager->getWorldsPtr()->getWorld2SetIDMap( mipmap_before_union );
 
+                    __reinit_loopedge_cout(
                     cout << "setting var rel_pose_between_worlds__wb_T_wa[ " << __b_world_is << "," << __a_world_is << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
+                    )
                     string info_string = "this pose computed from edge "+ std::to_string(_a) + " <--> " + std::to_string(_b);
                     // THIS IS THE ONLY PLACE WHERE THE 2 SETS CAN MERGE AND THE SETID OF THE WORLDS CAN CHANGE.
                     manager->getWorldsPtr()->setPoseBetweenWorlds( __b_world_is, __a_world_is, wb_T_wa,  info_string );
 
+                    __reinit_loopedge_cout(
                     cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
                     manager->getWorldsPtr()->print_summary();
+                    )
                     manager->getWorldsPtr()->getWorld2SetIDMap( mipmap_after_union );
 
+                    __reinit_loopedge_cout(
                     cout << TermColor::iWHITE();
                     cout << "Changes in the setID of the worlds\n";
+                    )
                     changes_to_setid_on_set_union.clear();
                     for( auto itt=mipmap_before_union.begin() ; itt!=mipmap_before_union.end() ; itt++ ) {
                         int setid_before =  itt->second;
                         int setid_after = mipmap_after_union.at( itt->first );
-                        cout << "world#" << itt->first  << ": " << setid_before << "--->" << setid_after << "  ";
-                        if( setid_before ==  setid_after )
-                            cout << "NOCHANGE\n";
+                        __reinit_loopedge_cout(
+                            cout << "world#" << itt->first  << ": " << setid_before << "--->" << setid_after << "  ";
+                        )
+                        if( setid_before ==  setid_after ) {
+                            __reinit_loopedge_cout( cout << "NOCHANGE\n"; )
+                        }
                         else {
-                            cout << "CHANGE\n";
+                            __reinit_loopedge_cout( cout << "CHANGE\n"; )
                             changes_to_setid_on_set_union[ itt->first ] = std::make_tuple( setid_before, setid_after );
                         }
                     }
-                    cout << TermColor::iWHITE() << "....\n" << TermColor::RESET();
+                    __reinit_loopedge_cout( cout << TermColor::iWHITE() << "....\n" << TermColor::RESET(); )
 
 
 
@@ -1583,14 +1632,14 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             );
 
         }
-        cout << "[ETA loopedge_len] ms=" << eta.toc_milli() << " loopedge_len="<< loopedge_len << endl;
+        ___trigger_header( cout << "[ETA loopedge_len] ms=" << eta.toc_milli() << " loopedge_len="<< loopedge_len << endl; )
 
 
         //-------------------------------
         //-3- Odometry Residues
         //-------------------------------
         eta.tic();
-        cout << "\n[Add Odom Residues starts] for( u=solvedUntil()+1=" << solvedUntil()+1 <<"; u< "<< node_len << "; u++) " << endl;
+        ___trigger_header( cout << "\n[Add Odom Residues starts] for( u=solvedUntil()+1=" << solvedUntil()+1 <<"; u< "<< node_len << "; u++) " << endl; )
         // for( int u=0 ; u<node_len ; u++ )
         // for( int u=prev_node_len ; u<node_len ; u++ ) // No!!!
         for( int u=solvedUntil()+1 ; u<node_len ; u++ )
@@ -1639,7 +1688,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             }
             __reint_odom_cout( cout << endl; )
         }
-        cout << "[ETA odometry residues] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl;
+        ___trigger_header( cout << "[ETA odometry residues] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl; )
 
 
 
@@ -1652,22 +1701,20 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         int ____solvedUntil_worldid = manager->which_world_is_this( manager->getNodeTimestamp(____solvedUntil) );
         bool ____solvedUntil_worldid_is_neg = false;
         if( ____solvedUntil_worldid < 0 ) { ____solvedUntil_worldid = -____solvedUntil_worldid -1; ____solvedUntil_worldid_is_neg=true;}
+        ___trigger_header(
         cout << "\n[Set initial guesses of the nodes] for( u=" << 0 << " ; u<" << node_len << " ; u++ ) ";
         cout << "\tsolvedUntil="<< ____solvedUntil << "  ____solvedUntil_worldid=" << ____solvedUntil_worldid <<  endl;
+        )
         for( int u=0 ; u<node_len ; u++ ) //TODO: No need to initialize the guess for all the nodes. only the unsolved and the setID changed nodes need to be reinitialized.
         {
             //
             //########## Initial Bookkeeping. worldID, setID, skip kidnapped
             int world_of_u = manager->which_world_is_this( manager->getNodeTimestamp(u) );
             int setID_of__world_of_u = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u );
-            __reint_gueses(
-            cout << TermColor::YELLOW() << "u=" << u << "\t";
-            // cout << "\tworld_of_u=" << world_of_u << "\tsetID_of__world_of_u=" << setID_of__world_of_u << TermColor::RESET() ;
-            )
+
 
             if( setID_of__world_of_u < 0 ){ // this indicates kidnapped nodes.
-                __reint_gueses( cout << " kidnapped node\n"; )
-                cout << TermColor::iBLUE() << "|" << TermColor::RESET();
+                __reint_gueses_short_info( cout << TermColor::iBLUE() << "|" << TermColor::RESET(); )
                 continue;
             }
 
@@ -1677,11 +1724,6 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             if( setID_of__world_of_u != world_of_u ) {
                 if( manager->getWorldsConstPtr()->is_exist(setID_of__world_of_u, world_of_u) ) {
                     wset_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds( setID_of__world_of_u, world_of_u );
-                    __reint_gueses(
-                    cout << "\n\twset_T_w=";
-                    cout << "w" << setID_of__world_of_u << "_T_" << "w" << world_of_u << " = ";
-                    cout << PoseManipUtils::prettyprintMatrix4d( wset_T_w ) ;
-                    )
                 }
                 else {
                     // this is impossible.
@@ -1702,34 +1744,20 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             if( u<=____solvedUntil )
                 _before_solveduntil = true;
 
-            if( changes_to_setid_on_set_union.count(world_of_u) > 0 )
+            if( changes_to_setid_on_set_union.count(world_of_u) > 0 ) {
                 _in_change_set = true;
-            cout << (_in_change_set?"T":"F") << (_before_solveduntil?"T":"F") << ".";
-
-            // if( ____solvedUntil!=0 && status_before_solveduntil && status_in_change_set==false) {
-                // cout << TermColor::iYELLOW() << "|" << TermColor::RESET();
-                // continue;
-            // }
-            //
-            // if( u <= ____solvedUntil && ____solvedUntil!=0 && changes_to_setid_on_set_union.count(world_of_u) == 0 ) {
-            //     __reint_gueses( cout << "skip because u<solvedUntil() and this world is not in the change list " << TermColor::RESET() << endl );
-            //     cout << TermColor::iYELLOW() << "|" << TermColor::RESET();
-            //     continue;// skip. let the initial guess remain as it is from previous Solve().
-            // }
-
-            // if( u!=0 && u <= solvedUntil() &&  changes_to_setid_on_set_union.count(world_of_u) == 0 ) {
-            //     __reint_gueses( cout << "skip because u<solvedUntil() and this world is not in the change list " << TermColor::RESET() << endl );
-            //     cout << TermColor::iYELLOW() << "|" << TermColor::RESET();
-            //     continue;// skip. let the initial guess remain as it is from previous Solve().
-            // }
+            __reint_gueses_short_info( cout << (_in_change_set?"T":"F") << (_before_solveduntil?"T":"F") << "."; )
+            }
 
 
+
+            // The 4 conditions on `_before_solveduntil` , `_in_change_set`
             if( _in_change_set &&  _before_solveduntil ) {
                 // this is a challenging case. needs careful implementation
-                cout << TermColor::iRED() << "|" << TermColor::RESET();
+                __reint_gueses_short_info( cout << TermColor::iRED() << "|" << TermColor::RESET(); )
 
                 if( setID_of__world_of_u == ____solvedUntil_worldid ) {
-                    cout << "Adifficult case 8\n";
+                    cout << "Adifficult case 8. impossible\n";
                     exit(8);
                 }else {
                     // cout << "Bdifficult case 8\n";
@@ -1739,40 +1767,44 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                     Matrix4d wsetnew_T_wsetold = manager->getWorldsConstPtr()->getPoseBetweenWorlds( new_setid, old_setid );
                     Matrix4d wsetnew_T_u = wsetnew_T_wsetold * this->getNodePose(u);
+                    __reint_gueses_short_info(
                     cout << TermColor::iRED()  << new_setid << "_T_" << old_setid << "*" << "P_" << u << TermColor::RESET() ;
+                    )
                     update_opt_variable_with( u, wsetnew_T_u );
                     // exit(8);
                 }
 
             } else if( _in_change_set &&  !_before_solveduntil ) {
 
-                cout << TermColor::RED();
+                __reint_gueses_short_info( cout << TermColor::RED(); )
                 if( ____solvedUntil_worldid == world_of_u ) {
                     Matrix4d w_M_last = manager->getNodePose( ____solvedUntil );
                     Matrix4d w_M_u = manager->getNodePose(u);
                     Matrix4d last_M_u = w_M_last.inverse() * w_M_u;
                     Matrix4d w_T_last;
-                    if( this->nodePoseExists(____solvedUntil ) )
+                    if( this->nodePoseExists(____solvedUntil ) ) {
                         w_T_last = this->getNodePose( ____solvedUntil );
-                    else
-                        cout << "HU";
+                    }
+                    else {
+                        __reint_gueses_short_info( cout << "HU"; )
+                    }
 
                     Matrix4d w_TM_u = w_T_last * last_M_u;
                     // cout << "A";
-                    cout << "P_" << ____solvedUntil << "*" << ____solvedUntil << "_odmT_" << u << ",";
+                    __reint_gueses_short_info( cout << "P_" << ____solvedUntil << "*" << ____solvedUntil << "_odmT_" << u << ","; )
                     update_opt_variable_with( u, w_TM_u );
                 } else {
                     Matrix4d wset_T_u = wset_T_w * manager->getNodePose(u);
                     // cout << "B";
-                    cout << setID_of__world_of_u << "_T_" << world_of_u << "* odmT_" << u <<",";
+                    __reint_gueses_short_info( cout << setID_of__world_of_u << "_T_" << world_of_u << "* odmT_" << u <<","; )
                     update_opt_variable_with( u, wset_T_u );
 
                 }
-                cout << TermColor::RESET();
+                __reint_gueses_short_info( cout << TermColor::RESET(); )
 
             } else if( !_in_change_set &&  _before_solveduntil ) {
                 if( ____solvedUntil == 0 ) {
-                    cout << TermColor::iYELLOW() << "X" << TermColor::RESET();
+                    __reint_gueses_short_info( cout << TermColor::iYELLOW() << "X" << TermColor::RESET(); )
                     Matrix4d w_M_u = manager->getNodePose(u);
                     update_opt_variable_with( u, w_M_u );
                     continue;
@@ -1780,11 +1812,11 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
 
                 // skip updating the initial guess of the node
-                cout << TermColor::iYELLOW() << "|" << TermColor::RESET();
+                __reint_gueses_short_info( cout << TermColor::iYELLOW() << "|" << TermColor::RESET(); )
 
             } else if( !_in_change_set &&  !_before_solveduntil ) {
 
-                cout << TermColor::GREEN();
+                __reint_gueses_short_info( cout << TermColor::GREEN(); )
                 if( ____solvedUntil_worldid == world_of_u ) {
                     Matrix4d w_M_last = manager->getNodePose( ____solvedUntil );
                     Matrix4d w_M_u = manager->getNodePose(u);
@@ -1792,142 +1824,113 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                     Matrix4d w_T_last = this->getNodePose( ____solvedUntil );
                     Matrix4d w_TM_u = w_T_last * last_M_u;
                     // cout << "A";
-                    cout << "P_" << ____solvedUntil << "*" << ____solvedUntil << "_M_" << u << ",";
+                    __reint_gueses_short_info( cout << "P_" << ____solvedUntil << "*" << ____solvedUntil << "_M_" << u << ","; )
                     update_opt_variable_with( u, w_TM_u );
                 } else {
                     Matrix4d wset_T_u = wset_T_w * manager->getNodePose(u);
                     // cout << "B";
-                    cout << setID_of__world_of_u << "_T_" << world_of_u << "* odmT_" << u <<",";
+                    __reint_gueses_short_info( cout << setID_of__world_of_u << "_T_" << world_of_u << "* odmT_" << u <<","; )
                     update_opt_variable_with( u, wset_T_u );
 
                 }
-                cout << TermColor::RESET();
+                __reint_gueses_short_info( cout << TermColor::RESET(); )
 
             }
 
             continue;
 
 
-            wTu = manager->getNodePose( u ); //TODO: instead of using the initial guess from odometry, make a better guess
-            __reint_gueses(
-            cout << "\n\tw_T_u=w" << world_of_u << "_T_" << u << "=" << PoseManipUtils::prettyprintMatrix4d( wTu ) ;
-            )
-
-            //
-            //############### --------> Set the initial guess of node pose (change the world as setID)
-            Matrix4d wset_T_u; //< w{setid}_T_u
-            if( world_of_u == setID_of__world_of_u ) {///< the case where it is in its own world
-                assert( manager->nodePoseExists(u) && "manager->nodePoseExists doesnt seem to exist when init for solving the ceres problem\n"  );
-                wset_T_u = wTu;
-                cout << TermColor::GREEN() << u << ":" << setID_of__world_of_u << "," << TermColor::RESET() ;
-            }
-            else {                ///< the case where u is in a different world than its own
-                wset_T_u = wset_T_w * wTu;
-                cout << TermColor::CYAN() << u << ":" << setID_of__world_of_u << "," << TermColor::RESET() ;
-            }
-
-            __reint_gueses(
-            cout << TermColor::GREEN() << "\n\t" << "wset_T_u="
-                << "w" << setID_of__world_of_u << "_T_" << u << "="
-                << PoseManipUtils::prettyprintMatrix4d( wset_T_u ) ;
-            )
-            assert( u<n_opt_variables() );
-
-            // cout << TermColor::YELLOW() << "\n\t" << "u(before setting)="
-                // << PoseManipUtils::prettyprintMatrix4d( getNodePose(u) ) ;
-
-
-            //#################################################################
-            //################# Update the optimization variable ##############
-            //#################################################################
-            update_opt_variable_with( u, wset_T_u );
-
-
-            // cout << TermColor::YELLOW() << "\n\t" << "u(after setting)="
-                // << PoseManipUtils::prettyprintMatrix4d( getNodePose(u) ) ;
-
-
-            // book-keeping
-            __reint_gueses( cout << TermColor::RESET() << endl );
-
-
         }
         changes_to_setid_on_set_union.clear(); //< this is important to clear. When the setID changes (upon union_sets), this map is filled in to indicate the changes. The node initialization uses this to selectively reinitialize old node.
-        cout << "\n[ETA initial_guesses] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl;
+        ___trigger_header( cout << "\n[ETA initial_guesses] done in milli-secs=" << eta.toc_milli() << " node_len="<< node_len << endl; )
 
 
         //-----------------------------
-        //  Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
+        //  -5- Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
         //------------------------------
         #if 1
         for( int v=0 ; v<regularization_terms_list.size() ; v++ ) {
             reint_problem.RemoveResidualBlock( regularization_terms_list[v] );
-            cout << "Remove " << v << " th regularization term\n";
+            __reint_node_regularization_info( cout << "Remove " << v << " th regularization term\n"; )
         }
         regularization_terms_list.clear();
 
         std::map< int, bool > mark_as_constant;
         // mark_as_constant[0] = true;
         mark_as_constant[1] = true;
+        __reint_node_regularization_info(
         cout << "There are " << manager->n_worlds() << " worlds. Loop through each world to get its start node\n";
         cout << "Number of opt_nodes = " << this->n_opt_variables() << endl;
+        )
+        string reg_debug_info = "";
         for( int ww=0 ; ww<manager->n_worlds(); ww++ ) {
             // if( mark_as_constant.count(ww) ==0  )
                 // continue;
             int ww_setid = manager->getWorldsConstPtr()->find_setID_of_world_i(ww);
             int ww_start = manager->nodeidx_of_world_i_started( ww );
-            cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << TermColor::RESET() << endl;
-            if( ww_setid >= 0 && ww_setid==ww ) {
+            __reint_node_regularization_info( cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << TermColor::RESET() << endl; )
+            if( (ww_setid >= 0 && ww_setid==ww)  ) {
 
-            cout << "node#" << ww_start << " is in world#" << ww << " which has setID as " << ww_setid << endl;
-            cout << "Mark node#" << ww_start << " as constant. \n";
+
+            __reint_node_regularization_info( cout << "Mark node#" << ww_start << " as constant. \n"; )
+            reg_debug_info += "Mark node#" + to_string(ww_start) + " as constant \n";
 
             // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_q(ww_start) );
             // reint_problem.SetParameterBlockConstant(  get_raw_ptr_to_opt_variable_t(ww_start)  );
 
             // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
+            // Functionally similar to marking it as constant
+            {
             Matrix4d ww_start_pose = this->getNodePose(ww_start);
-            cout << "ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl;
-            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, 3.3 );
+            __reint_node_regularization_info( cout << "ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl; )
+            ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, 1.3 );
             ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start), get_raw_ptr_to_opt_variable_t(ww_start) );
             regularization_terms_list.push_back( resi_id );
+            }
+
+
 
 
             }
-            else
-                cout << "skip\n";
+            else {
+                __reint_node_regularization_info( cout << "skip\n"; )
+            }
         }
-        cout << "Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << endl;
+        ___trigger_header( cout << "Total elements in `regularization_terms_list` = " << regularization_terms_list.size() << endl; )
+        ___trigger_header( cout << "Debug Info: " << reg_debug_info << "Done with debug info\n"; )
         #endif
 
 
 
 
         //-----------------------
-        //-4- ceres::Solve()
+        //-6- ceres::Solve()
         //-----------------------
         #if 1
-        cout << TermColor::iGREEN() ;
-        cout << "solve()\n";
+        ___trigger_header( cout << TermColor::iGREEN() << "=====================Ceres::Solve()============\n" << TermColor::RESET() ; )
+        __reint_ceres_solve_info( cout << TermColor::iGREEN()  << "ceres::Solve()\n"; )
+
         reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 2; // solving in progress.
         eta.tic();
         {
             std::lock_guard<std::mutex> lk(mutex_opt_vars);
             ceres::Solve( reint_options, &reint_problem, &reint_summary );
 
-            cout << "summary.termination_type = "<< (ceres::TerminationType::CONVERGENCE == reint_summary.termination_type) << endl;
+            __reint_ceres_solve_info( cout << "summary.termination_type = "<< (ceres::TerminationType::CONVERGENCE == reint_summary.termination_type) << endl; )
             // if( reint_summary.termination_type == ceres::TerminationType::CONVERGENCE )
                 solved_until = node_len-1;
-                cout << "solved_until:=" << node_len-1 << endl;
+                __reint_ceres_solve_info( cout << "solved_until:=" << node_len-1 << endl; )
 
             if( reint_summary.termination_type == ceres::TerminationType::CONVERGENCE )
                 n_solve_convergences++;
         }
         // cout << reint_summary.FullReport() << endl;
 
+        __reint_ceres_solve_info(
         cout << "Solve() took (milli-sec) : " << eta.toc_milli()  << endl;
         cout << reint_summary.BriefReport() << endl;
         cout << TermColor::RESET() << endl;
+        )
         #endif
 
 
@@ -1949,6 +1952,9 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
     cout << TermColor::BLUE() << "Done with thread. returning from `PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF`" << TermColor::RESET() << endl;
     cout << "n_solve_convergences = " << n_solve_convergences << "\tn_solves="<< trigger_id <<  endl;
+
+    #if 0  // make this '1' to print the current info on world starts/ends
     print_worlds_info(2);
+    #endif
 
 }
