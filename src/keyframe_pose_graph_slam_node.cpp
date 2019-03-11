@@ -345,6 +345,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 {
 
     ros::Rate loop_rate(20);
+    // ros::Rate loop_rate(5);
     map<int, vector<Matrix4d> > jmb;
     vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
     while( ros::ok() )
@@ -365,16 +366,20 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         int ____solvedUntil = slam->solvedUntil(); //note: solvedUntil is the index until which posegraph was solved
         int ____solvedUntil_worldid =  manager->which_world_is_this( manager->getNodeTimestamp(____solvedUntil) );
         bool ____solvedUntil_worldid_is_neg = false;
-        if( ____solvedUntil_worldid < 0 ) { ____solvedUntil_worldid = -____solvedUntil_worldid - 1; ____solvedUntil_worldid_is_neg=true; }
+        if( ____solvedUntil_worldid < 0 ) { /*____solvedUntil_worldid = -____solvedUntil_worldid - 1;*/ ____solvedUntil_worldid_is_neg=true; }
         // cerr << "\t[opt_traj_publisher_colored_by_world] slam->solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid" << ____solvedUntil_worldid << endl;
 
+        // cout << "[opt_traj_publisher_colored_by_world] i=0" << " i<"<<manager->getNodeLen() ;
+        // cout << "____solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid=" << ____solvedUntil_worldid << endl;
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+            // cout << "i=" << i << " world#" << world_id << endl;// << " w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << endl;
 
             // i>=0 and i<solvedUntil()
             if( i>=0 && i<= ____solvedUntil ) {
-                Matrix4d w_T_c_optimized, w_T_c;
+                // Matrix4d w_T_c_optimized;
+                Matrix4d w_T_c;
 
                 // cerr << "world_id=" << world_id << "   ";
                 // cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
@@ -382,14 +387,36 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
 
                 // If the optimized pose exists use that else use the odometry pose
-                if( slam->nodePoseExists(i) ) {
-                    w_T_c = slam->getNodePose( i );
-                    // cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
-                } else {
-                    if( manager->nodePoseExists(i )  ) {
-                        w_T_c = manager->getNodePose( i );
-                        // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                int from_slam_or_from_odom = -1;
+                if( world_id >= 0 ) {
+                    if( slam->nodePoseExists(i) ) {
+                        w_T_c = slam->getNodePose( i );
+                        // cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                        from_slam_or_from_odom = 1;
+                    } else {
+                        if( manager->nodePoseExists(i )  ) {
+                            w_T_c = manager->getNodePose( i );
+                            // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                            from_slam_or_from_odom = 2;
+                        }
                     }
+                } else {
+                    // kidnapped worlds viz, -1, -2 etc.
+                    // use the last pose and add the odometry to it
+                    // TODO
+                    from_slam_or_from_odom = 3;
+
+                    int last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
+                    Matrix4d w_T_last;
+                    // if( slam->nodePoseExists(i)  )
+                    //     w_T_last = slam->getNodePose(last_idx );
+                    // else
+                    //     w_T_last = manager->getNodePose(last_idx );
+                    w_T_last = *(jmb.at( -world_id - 1  ).rbegin());
+                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
+                    w_T_c = w_T_last * last_M_i;
+
+
                 }
 
 
@@ -399,6 +426,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 jmb[ world_id ].push_back( w_T_c );
                 lbm.push_back( w_T_c.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
+                // cout << "  (from_slam_or_from_odom=" << from_slam_or_from_odom << " w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
 
             }
 
@@ -409,21 +437,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 int last_idx=-1;
                 Matrix4d w_TM_i;
 
-                /*
-                if( ____solvedUntil == 0 ) {
-                    w_TM_i = manager->getNodePose( i );
-                } else if( world_id < 0 ) {
-                    last_idx = manager->nodeidx_of_world_i_ended( -world_id-1 );
-                } else if(world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==false) {
-                    last_idx = ____solvedUntil;
-                }
-                else if(world_id == ____solvedUntil_worldid && ____solvedUntil_worldid_is_neg==true) {
-                    last_idx = ____solvedUntil;
-                } else {
-                    // last_idx = manager->nodeidx_of_world_i_started( world_id );
-                    w_TM_i = manager->getNodePose( i );
-                }
-                */
+
 
                 if( ____solvedUntil == 0 ) {
                     w_TM_i = manager->getNodePose( i );
@@ -437,7 +451,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                         last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
                         // cout << "last_idx=" << last_idx << endl;
                     } else {
-                        cout << "opt_traj_publisher_colored_by_world impossivle";
+                        cout << "\nopt_traj_publisher_colored_by_world impossivle\n";
                         exit(2);
                     }
 
@@ -459,9 +473,12 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 if( jmb.count( world_id ) ==  0 )
                     jmb[ world_id ] = vector<Matrix4d>();
 
+
+
                 jmb[ world_id ].push_back( w_TM_i );
                 lbm.push_back( w_TM_i.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
+                // cout << "  w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << "  last_idx="<<  last_idx << endl;
             }
 
 
