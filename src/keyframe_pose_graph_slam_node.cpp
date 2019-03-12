@@ -559,7 +559,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         RosMarkerUtils::init_line_marker( linelist_marker );
         linelist_marker.ns = "loopedges_on_opt_traj"; linelist_marker.id = 0;
         linelist_marker.color.r = 0.4;linelist_marker.color.g = 0.2;linelist_marker.color.b = 0.;linelist_marker.color.a = 1.;
-        linelist_marker.scale.x = 0.06;
+        linelist_marker.scale.x = 0.1;
 
         int nloopedgfes = manager->getEdgeLen();
         for( int it=0 ; it<nloopedgfes; it++ ) {

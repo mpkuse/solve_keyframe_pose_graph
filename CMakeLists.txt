@@ -67,6 +67,11 @@ add_executable( keyframe_pose_graph_slam
         src/Worlds.cpp
         )
 
+
+# this is needed to indicate this this executable depends on the messages of the pkg.
+add_dependencies(keyframe_pose_graph_slam cerebro_generate_messages_cpp)
+
+
 add_executable( test_disjointset_imp src/test_disjointset.cpp )
 add_executable( test_bfs_imp src/test_bfs.cpp )
 

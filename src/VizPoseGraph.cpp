@@ -72,7 +72,7 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
     RosMarkerUtils::init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x *= 2;
+    marker.scale.x = 0.08;
     marker.ns = ns;
 
 
@@ -113,7 +113,7 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
     RosMarkerUtils::init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x = 0.02;
+    marker.scale.x = 0.06;
 
     std_msgs::ColorRGBA C1;
     C1.r = r; C1.g=g; C1.b=b; C1.a = 0.8;
@@ -451,7 +451,7 @@ void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string&
     RosMarkerUtils::init_camera_marker( marker2, 10 );
     RosMarkerUtils::setpose_to_marker( wTc, marker2 );
     RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
-    marker2.scale.x = 0.02;
+    marker2.scale.x = 0.08;
     marker2.id = 0;
     marker2.ns = ns+string("_cam_visual");
     pub_pgraph.publish( marker2 );
