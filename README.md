@@ -22,4 +22,12 @@ The visualization marker is a `LINE_STRIP` at all pose. The LINE_STRIP  will be 
 to denote the poses have been processed by ceres::Solve(). Green colored lines means those poses
 are purely odometry and have not yet been ceres::Solved()d.
 
-With very minor edits it is also possible to have camera visuals plotted. Camera visuals are disabled for speed sake.
+
+## Dependencies
+- ceres-solver
+- Eigen3
+- OpenCV 3 (only used for visualization)
+- [Cerebro pkg](https://github.com/mpkuse/cerebro) (for definations of LoopEdgeMsg)
+
+## Author
+Manohar Kuse <mpkuse@connect.ust.hk>
