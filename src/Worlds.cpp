@@ -161,7 +161,8 @@ bool Worlds::setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const str
     rel_pose_between_worlds__wb_T_wa___info_string[ make_pair(m,n) ] +=  ";" + info_string;
 
     // union_sets()
-    assert( disjoint_set.exist( m ) && disjoint_set.exist( n ) && "Either of m of n doesn't seem to exist in the disjoint set. m="+to_string(m)+" n="+to_string(n) );
+    // assert( (disjoint_set.exists( m ) && disjoint_set.exists( n )) && "Either of m of n doesn't seem to exist in the disjoint set. m="+to_string(m)+" n="+to_string(n) );
+    assert( (disjoint_set.exists( m ) && disjoint_set.exists( n )) );
 
     // ideally, disjoint_set.union_sets( m, n ), but doing the min max trick to retain the id of earliest sample.
     disjoint_set.union_sets( max(m,n), min(m,n) );

@@ -1656,7 +1656,9 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // --------------> add odometry residue :  u <---> u-f
             for( int f=1 ; f<5 ; f++ ){
-                int world_of_u_m_f = manager->which_world_is_this( manager->getNodeTimestamp(u-f) );
+                int world_of_u_m_f=-1;
+                if( u-f >= 0 )
+                    world_of_u_m_f = manager->which_world_is_this( manager->getNodeTimestamp(u-f) );
                 int setID_of__world_of_u_m_f = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u_m_f );
 
                 if( setID_of__world_of_u < 0 || setID_of__world_of_u_m_f < 0 ) {
@@ -1887,12 +1889,13 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
             // Functionally similar to marking it as constant
-            double regularization_weight = log( 1+ww_end - ww_start )/2.;
+            double regularization_weight = max( 1.1, log( 1+ww_end - ww_start )/2. );
 
             for( int s=0; s<1 ; s++ )
             {
             __reint_node_regularization_info( cout << "s="<< s << " "; )
-            Matrix4d ww_start_pose = this->getNodePose(ww_start+s);
+            // Matrix4d ww_start_pose = this->getNodePose(ww_start+s);
+            Matrix4d ww_start_pose = manager->getNodePose(ww_start+s);
             __reint_node_regularization_info( cout << "regularization_weight=" << regularization_weight << "   ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl; )
             ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, regularization_weight );
             ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start+s), get_raw_ptr_to_opt_variable_t(ww_start+s) );
@@ -1953,6 +1956,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                 n_solve_convergences++;
         }
         // cout << reint_summary.FullReport() << endl;
+        ___trigger_header( cout << TermColor::iGREEN() << "Solve() took (milli-sec) : " << eta.toc_milli() << "\n" << TermColor::RESET() ; )
+
 
         __reint_ceres_solve_info(
         cout << "Solve() took (milli-sec) : " << eta.toc_milli()  << endl;

@@ -318,7 +318,7 @@ void RosMarkerUtils::add_points_to_marker( const MatrixXd& X, visualization_msgs
 
 void RosMarkerUtils::add_colors_to_marker( const Vector3d& color_rgb, visualization_msgs::Marker& marker, bool clear_prev_colors )
 {
-    assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
+    // assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
     // geometry_msgs::Point pt;
     std_msgs::ColorRGBA pt_color;
 
@@ -334,7 +334,7 @@ void RosMarkerUtils::add_colors_to_marker( const Vector3d& color_rgb, visualizat
 
 void RosMarkerUtils::add_colors_to_marker( float c_r, float c_g, float c_b, visualization_msgs::Marker& marker, bool clear_prev_colors )
 {
-    assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
+    // assert( (X.rows() == 3) && "[RosMarkerUtils::add_colors_to_marker] X need to of size 3xN representing rgb colors of the points\n" );
     // geometry_msgs::Point pt;
     std_msgs::ColorRGBA pt_color;
 

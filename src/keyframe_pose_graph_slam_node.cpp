@@ -88,9 +88,30 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
         jmb.clear();
 
         // collect all
+        int __i__start = manager->nodeidx_of_world_i_started(manager->n_worlds()-1); //0;
+        //
+        // try maximum 5 times. mili-seconds after unkidnapped the next world is not available
+        // which causes a seg fault. This little fix will sleep for say 5ms and try again
+        for( int _j=0 ; _j<25 ; _j++ ) {
+            if( __i__start>=0 )
+                break;
+
+            cout << "[periodic_publish_odoms] sleep() for 100milis. This is done just as a precaution because next world may not be immediately available after unkidnap. It takes usually upto 500milisec for vins to reinitialize. This warning is not very critial." << endl;
+            std::this_thread::sleep_for (std::chrono::milliseconds(100));
+            __i__start = manager->nodeidx_of_world_i_started(manager->n_worlds()-1); //0;
+        }
+
+        // cout << "__i__start=" << __i__start << endl;
+
         // for( int i=0 ; i<manager->getNodeLen() ; i++ )
-        for( int i=manager->nodeidx_of_world_i_started(manager->n_worlds()-1) ; i<manager->getNodeLen() ; i++ )
+        for( int i=__i__start ; i<manager->getNodeLen() ; i++ )
         {
+            if( i==-3 || i==-4 ) {
+                cout << "break" << endl;
+                break;
+            }
+            if( i< 0 )
+                cout << TermColor::iCYAN() << "manager->getNodeTimestamp(" << i << ")" << TermColor::RESET() << endl;
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
             if( manager->nodePoseExists(i )  ) {
                 auto w_T_c = manager->getNodePose( i );
@@ -103,6 +124,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
                 jmb[ world_id ].push_back( w_T_c );
             }
         }
+        // cout << "Done collecting\n";
 
 
 
@@ -142,7 +164,8 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
             if( it->first > to_publish_key &&  it->first >=0 )
                 to_publish_key = it->first;
         }
-        viz->publishNodesAsLineStrip( jmb[to_publish_key] , "latest_odometry", 0.0, 0.7, 0.0 );
+        if( to_publish_key >= 0 )
+            viz->publishNodesAsLineStrip( jmb[to_publish_key] , "latest_odometry", 0.0, 0.7, 0.0 );
 
         // Publish Camera visual
         Matrix4d wi_T_latest = *( jmb.at( to_publish_key ).rbegin() );

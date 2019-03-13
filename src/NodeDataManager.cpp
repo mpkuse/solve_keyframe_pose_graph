@@ -356,10 +356,14 @@ bool NodeDataManager::getNodeTimestamp( int i, ros::Time& stamp ) const
     return status;
 }
 
+
+#define __MY_ASSERT__(condition, to_print) { if(!(condition)){ std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << "msg=" << to_print << std::endl; } }
 const ros::Time NodeDataManager::getNodeTimestamp( int i ) const
 {
     std::lock_guard<std::mutex> lk(node_mutex);
-    assert( i>=0 && i< node_timestamps.size() );
+    // cout << string( "you requested timestamp at i="+to_string(i)+", but node_timestamps.size="+to_string( node_timestamps.size()) ).c_str() << endl;
+    // assert( i>=0 && i< node_timestamps.size() && string( "you requested timestamp at i="+to_string(i)+", but node_timestamps.size="+to_string( node_timestamps.size()) ).c_str() );
+    __MY_ASSERT__( (i>=0 && i< node_timestamps.size()),  "you requested timestamp at i="+to_string(i)+", but node_timestamps.size="+to_string( node_timestamps.size()) );
     return node_timestamps[i];
 }
 
@@ -753,6 +757,7 @@ ros::Time NodeDataManager::stamp_of_kidnap_i_started( int i ) const
         return kidnap_starts[i];
     }
 
+    assert( false && "[NodeDataManager::stamp_of_kidnap_i_started]no such kidnap" );
     __KIDNAP_START_ENDS___debug( cout << "[NodeDataManager::stamp_of_kidnap_i_started]no such kidnap" << i << " kidnap_starts.size()=" << kidnap_starts.size() << endl; )
     return ros::Time();
 }
@@ -764,6 +769,7 @@ ros::Time NodeDataManager::stamp_of_kidnap_i_ended( int i ) const
         return kidnap_ends[i];
     }
 
+    assert( false && "[NodeDataManager::stamp_of_kidnap_i_ended]no such kidnap" );
     __KIDNAP_START_ENDS___debug( cout << "[NodeDataManager::stamp_of_kidnap_i_ended]no such kidnap" << i << " kidnap_ends.size()=" << kidnap_ends.size() << endl; )
     return ros::Time();
 }
@@ -850,15 +856,16 @@ int NodeDataManager::which_world_is_this( int i ) //given the node idx, gets the
 }
 */
 
-
 // #define __WORLD_START_ENDS___debug( msg ) msg;
 #define __WORLD_START_ENDS___debug( msg ) ;
+
+#define __WORLD_START____errors( msg ) msg;
 int NodeDataManager::nodeidx_of_world_i_started( int i ) const
 {
 
     if( i<0 )
     {
-        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] i cant be negative. no such world " << i << " exists\n"; )
+        __WORLD_START____errors( cout << TermColor::RED() << "[NodeDataManager::nodeidx_of_world_i_started] ERROR i cant be negative. no such world " << i << " exists" << TermColor::RESET() << endl; )
         return -3;
     }
     if( i==0 ) {
@@ -876,7 +883,7 @@ int NodeDataManager::nodeidx_of_world_i_started( int i ) const
     }
 
     if( i>=1 && (i-1) <n ) {
-        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] return nodeidx of kidnap_ends["<<i-1 <<"] as the start of world" << i << "\n"; )
+        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started]  return nodeidx of kidnap_ends["<<i-1 <<"] as the start of world" << i << "\n"; )
         std::lock_guard<std::mutex> lk(node_mutex);
 
         int r=0;
@@ -890,10 +897,14 @@ int NodeDataManager::nodeidx_of_world_i_started( int i ) const
     }
 
 
-    __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_started] no such world " << i << " exists\n"; )
+    __WORLD_START____errors( cout << TermColor::RED() << "[NodeDataManager::nodeidx_of_world_i_started] ERROR no such world " << i << " exists" << TermColor::RESET() << endl; )
     return -4;
 }
 
+
+
+// #define __WORLD__ENDS___error( msg ) msg;
+#define __WORLD__ENDS___error( msg ) ;
 int NodeDataManager::nodeidx_of_world_i_ended( int i ) const
 {
     // returns a large number if the world i never ended
@@ -904,12 +915,12 @@ int NodeDataManager::nodeidx_of_world_i_ended( int i ) const
     }
 
     if( i<0 ) {
-        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] i cannot be negative. no such world\n");
+        __WORLD__ENDS___error( cout << TermColor::RED() << "[NodeDataManager::nodeidx_of_world_i_ended] ERROR i cannot be negative. no such world" << TermColor::RESET() << endl; );
         return -1;
     }
 
     if( i>n_kidnap_ends ) {
-        __WORLD_START_ENDS___debug( cout << "[NodeDataManager::nodeidx_of_world_i_ended] no such world" << i << "\n"; )
+        __WORLD__ENDS___error( cout << TermColor::RED() << "[NodeDataManager::nodeidx_of_world_i_ended] ERROR no such world" << i << TermColor::RESET() << endl; )
         return -1;
     }
     else {
@@ -937,5 +948,7 @@ int NodeDataManager::nodeidx_of_world_i_ended( int i ) const
 int NodeDataManager::n_worlds() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
+    // if( current_kidnap_status == true )
+        // return kidnap_
     return kidnap_ends.size() + 1;
 }

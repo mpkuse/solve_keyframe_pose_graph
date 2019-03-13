@@ -24,7 +24,11 @@ find_package(Ceres REQUIRED)
 find_package(OpenCV 3 REQUIRED)
 #find_package( ZLIB REQUIRED ) # Needed for cnpy (c++ support for writing .npy and .npz files). Remove this and in target if you dont need it.
 
-#set(CMAKE_BUILD_TYPE "Release")
+
+
+set(CMAKE_BUILD_TYPE "Release")
+#set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set( CMAKE_CXX_FLAGS "-fpermissive -std=c++11 -O3" )
 #-DEIGEN_USE_MKL_ALL")
 
