@@ -1369,8 +1369,8 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 // the start of each worlds as constant. You can tune this as need be.
 // The reason I do not use ceres::SetParameterBlockConstant() is that it cannot be
 // set to not constant which hinders when the initial guess moves.
-// #define __reint_node_regularization_info( msg ) msg;
-#define __reint_node_regularization_info( msg ) ;
+#define __reint_node_regularization_info( msg ) msg;
+// #define __reint_node_regularization_info( msg ) ;
 
 
 // Print Ceres Brief Report and other info on solving
@@ -1570,8 +1570,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                     )
                     // compute the relative transforms between the 2 worlds
-                    Matrix4d wa_T_a = this->getNodePose( _a );
-                    Matrix4d wb_T_b = this->getNodePose( _b );
+                    Matrix4d wa_T_a = manager->getNodePose( _a );
+                    Matrix4d wb_T_b = manager->getNodePose( _b );
                     Matrix4d b_T_a_observed = manager->getEdgePose(e);
 
                     Matrix4d wb_T_a = wb_T_b * b_T_a_observed;
@@ -1579,15 +1579,23 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                     __reinit_loopedge_cout(
                     cout << "I just computed the rel pose between 2 worlds, wb_T_wa=" << TermColor::iBLUE() << PoseManipUtils::prettyprintMatrix4d(wb_T_wa) << TermColor::RESET() << endl;
                     )
+                    // Done...!
 
+
+                    // The following bit of code, records the setID states before `setPoseBetweenWorlds` and after `setPoseBetweenWorlds`
+                    // This is done so that we know which world's base changed. This is used later to initialize/reinitialize the guesses for optimization
+
+                    //---- get setID (before)
                     std::map<int,int> mipmap_before_union, mipmap_after_union;
                     __reinit_loopedge_cout(
                     cout << "CURRENT STATUS OF WORLDS (disjoint set) before:\n";
-
                     manager->getWorldsPtr()->print_summary();
                     )
                     manager->getWorldsPtr()->getWorld2SetIDMap( mipmap_before_union );
 
+
+
+                    //---- setPoseBetweenWorlds()
                     __reinit_loopedge_cout(
                     cout << "setting var rel_pose_between_worlds__wb_T_wa[ " << __b_world_is << "," << __a_world_is << " ] = " << PoseManipUtils::prettyprintMatrix4d(wb_T_wa)  << endl;
                     )
@@ -1595,12 +1603,19 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                     // THIS IS THE ONLY PLACE WHERE THE 2 SETS CAN MERGE AND THE SETID OF THE WORLDS CAN CHANGE.
                     manager->getWorldsPtr()->setPoseBetweenWorlds( __b_world_is, __a_world_is, wb_T_wa,  info_string );
 
+
+
+
+                    //---- get setID (after)
                     __reinit_loopedge_cout(
                     cout << "CURRENT STATUS OF WORLDS (disjoint set) after:\n";
                     manager->getWorldsPtr()->print_summary();
                     )
                     manager->getWorldsPtr()->getWorld2SetIDMap( mipmap_after_union );
 
+
+
+                    //---- findout the changes from `mipmap_before_union` to `mipmap_after_union`
                     __reinit_loopedge_cout(
                     cout << TermColor::iWHITE();
                     cout << "Changes in the setID of the worlds\n";
@@ -1889,13 +1904,13 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
             // Functionally similar to marking it as constant
-            double regularization_weight = max( 1.1, log( 1+ww_end - ww_start )/2. );
+            double regularization_weight = max( 2.1, log( 1+ww_end - ww_start )/2. );
 
-            for( int s=0; s<1 ; s++ )
+            for( int s=0; s<3 ; s++ )
             {
             __reint_node_regularization_info( cout << "s="<< s << " "; )
-            // Matrix4d ww_start_pose = this->getNodePose(ww_start+s);
-            Matrix4d ww_start_pose = manager->getNodePose(ww_start+s);
+            Matrix4d ww_start_pose = this->getNodePose(ww_start+s);
+            // Matrix4d ww_start_pose = manager->getNodePose(ww_start+s);
             __reint_node_regularization_info( cout << "regularization_weight=" << regularization_weight << "   ww_start_pose : " << PoseManipUtils::prettyprintMatrix4d( ww_start_pose ) << endl; )
             ceres::CostFunction * regularixa_cost = NodePoseRegularization::Create( ww_start_pose, regularization_weight );
             ceres::ResidualBlockId resi_id = reint_problem.AddResidualBlock( regularixa_cost, NULL,  get_raw_ptr_to_opt_variable_q(ww_start+s), get_raw_ptr_to_opt_variable_t(ww_start+s) );

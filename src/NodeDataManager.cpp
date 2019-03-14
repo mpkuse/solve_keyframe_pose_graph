@@ -469,12 +469,14 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
         json node;
         node["timestamp"] = getNodeTimestamp(i).toSec();
         node["idx"] = i;
+        node["world_id"] = which_world_is_this( getNodeTimestamp(i) );
 
         Matrix4d wTc;
         getNodePose(i, wTc );
         std::stringstream ss;
         ss << wTc.format(CSVFormat);
         node["wTc"] = ss.str();
+        node["wTc_pretty"] = PoseManipUtils::prettyprintMatrix4d(wTc);
 
         Matrix<double,6,6> cov;
         std::stringstream ss2;
@@ -503,11 +505,22 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
         edge["timestamp0"] = getNodeTimestamp(p.first).toSec();
         edge["timestamp1"] = getNodeTimestamp(p.second).toSec();
 
+        edge["world0_id"] = which_world_is_this( getNodeTimestamp(p.first) );
+        edge["world1_id"] = which_world_is_this( getNodeTimestamp(p.second) );
+        if( edge["world0_id"] < 0 || edge["world1_id"] < 0 )
+            edge["code"] = -1;
+        else if( edge["world0_id"] == edge["world1_id"] ) {
+            edge["code"] = 1;
+        } else {
+            edge["code"] = 2;
+        }
+
 
         const Matrix4d b_T_a = getEdgePose(i);
         std::stringstream ss;
         ss << b_T_a.format(CSVFormat);
         edge["b_T_a"] = ss.str();
+        edge["b_T_a_pretty"] = PoseManipUtils::prettyprintMatrix4d(b_T_a);
 
         edge["weight"] = getEdgeWeight( i );
         edge["description"] = getEdgeDescriptionString(i);
@@ -517,6 +530,35 @@ bool NodeDataManager::saveAsJSON( const string& base_path )
 
 
     }
+
+    // World Info
+    json all_world;
+    all_info["meta_data"]["n_worlds"] = n_worlds();
+    for( int i=0 ; i<n_worlds() ; i++ ) {
+        json xworld;
+        xworld["id"] = i;
+        xworld["nodeidx_of_world_i_started"] = nodeidx_of_world_i_started( i );
+        xworld["nodeidx_of_world_i_ended"] = nodeidx_of_world_i_ended( i );
+
+        all_world.push_back( xworld );
+    }
+    all_info[ "world_info"] = all_world;
+
+    // Kidnap Info
+    json all_kidnaps;
+    all_info["meta_data"]["n_worlds"] = n_kidnaps();
+    for( int i=0 ; i<n_kidnaps() ; i++ ) {
+        json kidnap;
+        kidnap["idx"] = i;
+        kidnap["stamp_of_kidnap_i_started"] = stamp_of_kidnap_i_started(i).toSec();
+        kidnap["stamp_of_kidnap_i_ended"] = stamp_of_kidnap_i_ended(i).toSec();
+
+        all_kidnaps.push_back( kidnap );
+    }
+    all_info[ "kidnap_info"] = all_kidnaps;
+    all_info["disjoint_set_status"] = getWorldsConstPtr()->disjoint_set_status();
+
+
 
 
     // Save file
@@ -695,6 +737,8 @@ void NodeDataManager::rcvd_kidnap_indicator_callback( const std_msgs::HeaderCons
     }
 
     ROS_ERROR( "[posegraph solver NodeDataManager::rcvd_kidnap_indicator_callback] rcvd_header is something other than `kidnapped` or `unkidnapped`. This should not be happening and is a fatal error.");
+    exit(2);
+
 }
 
 

@@ -713,6 +713,9 @@ int main( int argc, char ** argv)
     th_slam.join();
 
 
+
+    #define __LOGGING__ 1 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
+    #if __LOGGING__
     ///// Save Pose Graph for Debugging
     const string DATA_PATH = "/Bulk_Data/_tmp_posegraph/";
 
@@ -728,8 +731,6 @@ int main( int argc, char ** argv)
     std::system( cmd_mkdir.c_str() );
 
 
-    #define __LOGGING__ 1 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
-    #if __LOGGING__
     // save
     // manager->saveForDebug( DATA_PATH );
     manager->saveAsJSON( DATA_PATH );
