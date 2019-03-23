@@ -1357,12 +1357,12 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 // #define __reint_odom_cout(msg) msg;
 #define __reint_odom_cout(msg) ;
 
-// #define __reinit_loopedge_cout( msg ) msg;
-#define __reinit_loopedge_cout( msg ) ;
+#define __reinit_loopedge_cout( msg ) msg;
+// #define __reinit_loopedge_cout( msg ) ;
 
 
-// #define __reint_gueses_short_info(msg) msg;
-#define __reint_gueses_short_info(msg) ;
+#define __reint_gueses_short_info(msg) msg;
+// #define __reint_gueses_short_info(msg) ;
 
 
 // Print info on node regularization. I use node regularization to set
@@ -1374,8 +1374,9 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 
 
 // Print Ceres Brief Report and other info on solving
-// #define __reint_ceres_solve_info( msg ) msg;
-#define __reint_ceres_solve_info( msg ) ;
+#define __reint_ceres_solve_info( msg ) msg;
+// #define __reint_ceres_solve_info( msg ) ;
+
 
 
 // This thread wakes up when there are new loopedges. This flag controls the printing on trigger.
@@ -1893,6 +1894,10 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             int ww_setid = manager->getWorldsConstPtr()->find_setID_of_world_i(ww);
             int ww_start = manager->nodeidx_of_world_i_started( ww );
             int ww_end = manager->nodeidx_of_world_i_ended( ww );
+            if( ww_start < 0 ) {
+                __reint_node_regularization_info( cout << TermColor::RED() << "ignore this world since ww_start is negative. Shouldnt be happening but..:(\n" );
+                continue;
+            }
             __reint_node_regularization_info( cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << " ww_end=" << ww_end << TermColor::RESET() << endl; )
             if( (ww_setid >= 0 && ww_setid==ww)  )
             {
@@ -1904,7 +1909,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // Matrix4d ww_start_pose = manager->getNodePose(ww_start);
             // Functionally similar to marking it as constant
-            double regularization_weight = max( 2.1, log( 1+ww_end - ww_start )/2. );
+            double regularization_weight = max( 1.1, log( 1+ww_end - ww_start )/2. );
 
             for( int s=0; s<3 ; s++ )
             {

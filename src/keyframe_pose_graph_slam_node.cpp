@@ -97,7 +97,7 @@ void periodic_publish_odoms( const NodeDataManager * manager, const VizPoseGraph
                 break;
 
             cout << "[periodic_publish_odoms] sleep() for 100milis. This is done just as a precaution because next world may not be immediately available after unkidnap. It takes usually upto 500milisec for vins to reinitialize. This warning is not very critial." << endl;
-            std::this_thread::sleep_for (std::chrono::milliseconds(100));
+            std::this_thread::sleep_for (std::chrono::milliseconds(200));
             __i__start = manager->nodeidx_of_world_i_started(manager->n_worlds()-1); //0;
         }
 
@@ -364,13 +364,32 @@ struct opt_traj_publisher_options
     int line_color_style=10;
 };
 
+// #define __opt_traj_publisher_colored_by_world___print_on_file_exist
+
+#ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string>
+#include <fstream>
+inline bool exists_test3 (const std::string& name) {
+  struct stat buffer;
+  return (stat (name.c_str(), &buffer) == 0);
+}
+#endif
+
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz, const opt_traj_publisher_options& options )
 {
+    #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+    bool enable_cout = false;
+    #endif
+
+
 
     ros::Rate loop_rate(20);
     // ros::Rate loop_rate(5);
     map<int, vector<Matrix4d> > jmb;
     vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
+    bool published_axis = true;
     while( ros::ok() )
     {
         // cout << "[opt_traj_publisher_colored_by_world]---\n";
@@ -392,8 +411,19 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         if( ____solvedUntil_worldid < 0 ) { /*____solvedUntil_worldid = -____solvedUntil_worldid - 1;*/ ____solvedUntil_worldid_is_neg=true; }
         // cerr << "\t[opt_traj_publisher_colored_by_world] slam->solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid" << ____solvedUntil_worldid << endl;
 
+        #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+        if( exists_test3( "/app/xxx") )
+            enable_cout = true;
+        else
+            enable_cout = false;
+
+        if( enable_cout ) {
         // cout << "[opt_traj_publisher_colored_by_world] i=0" << " i<"<<manager->getNodeLen() ;
-        // cout << "____solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid=" << ____solvedUntil_worldid << endl;
+        cout << "____solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid=" << ____solvedUntil_worldid << endl;
+        }
+        #endif
+
+
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
@@ -449,7 +479,11 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 jmb[ world_id ].push_back( w_T_c );
                 lbm.push_back( w_T_c.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
-                // cout << "  (from_slam_or_from_odom=" << from_slam_or_from_odom << " w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+
+                #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+                if( enable_cout )
+                cout << i << ":" <<  world_id << "  (from_slam_or_from_odom=" << from_slam_or_from_odom << " w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                #endif
 
             }
 
@@ -468,11 +502,22 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
                         last_idx = ____solvedUntil;}
                     else if( world_id >=0 && ____solvedUntil_worldid != world_id  ) {
-                        w_TM_i = manager->getNodePose( i );}
+                        w_TM_i = manager->getNodePose( i );
+                    }
                     else if( world_id < 0 ) {
-                        // last_idx = ____solvedUntil;
-                        last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
-                        // cout << "last_idx=" << last_idx << endl;
+                        // this is the kidnaped node
+                        last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 ); // only this in working code
+
+                        if( !( last_idx >= 0 && last_idx < manager->getNodeLen() && i >=0 && i<manager->getNodeLen()) ) {
+                            cout << "ERROR. last_idx=" << last_idx << endl;
+                            manager->getWorldsConstPtr()->print_summary( 2);
+                            manager->print_worlds_info(2);
+                            assert( last_idx >= 0 && last_idx < manager->getNodeLen() && i >=0 && i<manager->getNodeLen() );
+                        }
+
+                        w_TM_i = *(jmb[ -world_id-1 ].rbegin()) * ( manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i ) ) ;
+                        last_idx = -1;
+
                     } else {
                         cout << "\nopt_traj_publisher_colored_by_world impossivle\n";
                         exit(2);
@@ -501,7 +546,11 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 jmb[ world_id ].push_back( w_TM_i );
                 lbm.push_back( w_TM_i.col(3).topRows(3) );
                 latest_pose_worldid = world_id;
-                // cout << "  w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << "  last_idx="<<  last_idx << endl;
+
+                #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+                if( enable_cout )
+                cout << i << ":" << world_id << "  w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << "  last_idx="<<  last_idx << endl;
+                #endif
             }
 
 
@@ -596,6 +645,14 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             RosMarkerUtils::add_point_to_marker(  ____bpose, linelist_marker, false );
         }
         viz->publishThisVisualMarker( linelist_marker );
+
+
+        if( published_axis || rand() % 100 == 0 ) {
+            Matrix4d _axis_pose = Matrix4d::Identity();
+            // odm_axis_pose(0,3) += offset_x; odm_axis_pose(1,3) += offset_y; odm_axis_pose(2,3) += offset_z;
+            viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0  );
+            published_axis = false;
+        }
 
 
         // book keeping

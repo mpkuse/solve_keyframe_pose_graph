@@ -996,3 +996,108 @@ int NodeDataManager::n_worlds() const
         // return kidnap_
     return kidnap_ends.size() + 1;
 }
+
+
+
+
+void NodeDataManager::print_worlds_info( int verbosity )
+{
+
+    bool start_ends_u_of_worlds=false, rel_pose_between_worlds=false, kidnap_info=false, which_world_each_node_belong_to=false ;
+
+    switch( verbosity )
+    {
+        case 0:
+        start_ends_u_of_worlds=true;
+        rel_pose_between_worlds=false;
+        kidnap_info=false;
+        which_world_each_node_belong_to=false;
+        break;
+        case 1:
+        start_ends_u_of_worlds=true;
+        rel_pose_between_worlds=true;
+        kidnap_info=true;
+        which_world_each_node_belong_to=false;
+        break;
+        case 2:
+        start_ends_u_of_worlds=true;
+        rel_pose_between_worlds=true;
+        kidnap_info=true;
+        which_world_each_node_belong_to=true;
+        break;
+        default:
+        cout << "[NodeDataManager::print_worlds_info] ERROR invalid verbosity.\n";
+        exit(10);
+    }
+
+    cout << "---------------------!!!!!  NodeDataManager::print_worlds_info verbosity = " << verbosity << "----------------\n";
+
+    if( start_ends_u_of_worlds ) {
+    //// Info on worlds
+    cout << TermColor::YELLOW() ;
+    cout << "Info on worlds start and end times from NodeDataManager\n";
+    cout << "#worlds = " << this->n_worlds()  << "\t";
+    cout << "\tWorlds::n_worlds = " << this->getWorldsConstPtr()->n_worlds() << "\t";
+    cout << "\tWorlds::n_sets = " << this->getWorldsConstPtr()->n_sets() << "\t";
+    cout << endl;
+    for( int i=0 ; i<this->n_worlds() ; i++ ) {
+        cout << "world#" << std::setw(2) << i;
+        cout << "  start_u=" <<  std::setw(5) << this->nodeidx_of_world_i_started(i);
+        cout << "  end_u=" <<  std::setw(5) << this->nodeidx_of_world_i_ended(i);
+        // cout << "  startstamp=" <<  manager->getNodeTimestamp( manager->nodeidx_of_world_i_started(i) );
+        // cout << "  endstamp  =" << manager->getNodeTimestamp( manager->nodeidx_of_world_i_ended(i) );
+        cout << " (" <<  this->getNodeTimestamp( this->nodeidx_of_world_i_started(i) );
+        cout << " to " << this->getNodeTimestamp( this->nodeidx_of_world_i_ended(i) ) << ")";
+        cout << "  sec=" << this->getNodeTimestamp( this->nodeidx_of_world_i_ended(i) ) - this->getNodeTimestamp( this->nodeidx_of_world_i_started(i) );
+        cout << "  setID=" << std::setw(2) << this->getWorldsConstPtr()->find_setID_of_world_i( i );
+        cout << endl;
+    }
+    cout << TermColor::RESET() << endl;
+    }
+
+    if( rel_pose_between_worlds ) {
+    //// Relative transforms between worlds
+    this->getWorldsPtr()->print_summary(2);
+    } else {
+    this->getWorldsPtr()->print_summary(0);
+    }
+
+
+    if( kidnap_info ) {
+    //// When was I kidnaped
+    cout << TermColor::BLUE();
+    cout << "Info on Kidnap starts and ends\n";
+    cout << "There were a total of " << this->n_kidnaps() << " kidnaps\n";
+    for( int i=0 ; i<this->n_kidnaps() ; i++ )
+    {
+        cout << "kidnap#" << std::setw(2)  << i ;
+        cout << "\tstart=" << this->stamp_of_kidnap_i_started(i);
+        cout << "\tends =" << this->stamp_of_kidnap_i_ended(i);
+        cout << "\tduration=" << this->stamp_of_kidnap_i_ended(i) - this->stamp_of_kidnap_i_started(i) ;
+        cout << endl;
+    }
+
+    cout << " manager->last_kidnap_started() : "  << this->last_kidnap_started() << endl;
+    cout << " manager->last_kidnap_ended()   : " <<  this->last_kidnap_ended() << endl;
+    cout << TermColor::RESET();
+    }
+
+
+
+    if( which_world_each_node_belong_to ) {
+    //// Which world each of the nodes belong to
+    cout << "Info on all the Nodes\n";
+    int r=0;
+    for( int r=0 ; r<this->getNodeLen() ; r++ )
+    {
+        ros::Time _t = this->getNodeTimestamp(r);
+        cout << "node#" <<  std::setw(5) << r << " t=" << _t  << " world=" <<  std::setw(3) << this->which_world_is_this( _t ) ;
+
+        if( r%3 == 0  )
+            cout << endl;
+        else
+            cout << "\t\t";
+    }
+    cout << endl;
+    }
+}
