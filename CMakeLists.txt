@@ -26,8 +26,8 @@ find_package(OpenCV 3 REQUIRED)
 
 
 
-#set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE "Release")
+#set(CMAKE_BUILD_TYPE Debug)
 #set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set( CMAKE_CXX_FLAGS "-fpermissive -std=c++11 -O3" )
 #-DEIGEN_USE_MKL_ALL")
