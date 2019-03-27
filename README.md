@@ -21,13 +21,14 @@ This class holds the pointer to an object of class NodeDataManager.
 All the functions related to ceres-solver here. It is intended to be run in a separate thread.
 The thread triggers on seeing new loopedges. On trigger it does:
 1. Allocate new opt variables (if need be)
-- Add Loop Edges Residue Term to Ceres::Problem
+1. Add Loop Edges Residue Term to Ceres::Problem
     - Loop Edges (intra world)
     - Loop edges (inter world)
-- Add Odometry Residues to Ceres::Problem
-- Initial Guesses for the nodes
-- Mark 1st nodes of each worlds as constant with Node Regularization
-- ceres::Solve()
+        - Compute Pose between the worlds if 1st loop connection between the worlds.
+1. Add Odometry Residues to Ceres::Problem
+1. Initial Guesses for the nodes
+1. Mark 1st nodes of each worlds as constant with Node Regularization
+1. ceres::Solve()
 
 
 
