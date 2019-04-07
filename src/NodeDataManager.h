@@ -44,6 +44,7 @@
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/ColorRGBA.h>
 #include <std_msgs/Bool.h>
+#include <geometry_msgs/PointStamped.h>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -131,7 +132,7 @@ private:
 
 
     // Utilities
-    int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp );
+    int find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp ) const;
 
     // void _print_info_on_npyarray( const cnpy::NpyArray& arr );
 

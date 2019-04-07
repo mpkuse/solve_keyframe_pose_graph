@@ -1357,20 +1357,20 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 // #define __reint_odom_cout(msg) msg;
 #define __reint_odom_cout(msg) ;
 
-#define __reinit_loopedge_cout( msg ) msg;
-// #define __reinit_loopedge_cout( msg ) ;
+// #define __reinit_loopedge_cout( msg ) msg;
+#define __reinit_loopedge_cout( msg ) ;
 
 
-#define __reint_gueses_short_info(msg) msg;
-// #define __reint_gueses_short_info(msg) ;
+// #define __reint_gueses_short_info(msg) msg;
+#define __reint_gueses_short_info(msg) ;
 
 
 // Print info on node regularization. I use node regularization to set
 // the start of each worlds as constant. You can tune this as need be.
 // The reason I do not use ceres::SetParameterBlockConstant() is that it cannot be
 // set to not constant which hinders when the initial guess moves.
-#define __reint_node_regularization_info( msg ) msg;
-// #define __reint_node_regularization_info( msg ) ;
+// #define __reint_node_regularization_info( msg ) msg;
+#define __reint_node_regularization_info( msg ) ;
 
 
 // Print Ceres Brief Report and other info on solving
@@ -1911,7 +1911,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             // Functionally similar to marking it as constant
             double regularization_weight = max( 1.1, log( 1+ww_end - ww_start )/2. );
 
-            for( int s=0; s<3 ; s++ )
+            for( int s=0; s<1 ; s++ )
             {
             __reint_node_regularization_info( cout << "s="<< s << " "; )
             Matrix4d ww_start_pose = this->getNodePose(ww_start+s);

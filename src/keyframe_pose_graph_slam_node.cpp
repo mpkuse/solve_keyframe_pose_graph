@@ -55,6 +55,7 @@ using namespace Eigen;
 #include "NodeDataManager.h"
 #include "PoseGraphSLAM.h"
 #include "VizPoseGraph.h"
+#include "utils/RawFileIO.h"
 
 void periodic_print_len( const NodeDataManager * manager )
 {
@@ -352,6 +353,35 @@ void monitor_disjoint_set_datastructure( const NodeDataManager * manager, const 
 }
 
 
+
+// set this to 0 to remove the gt code
+#define __CODE___GT__ 0
+///////////////////
+#if __CODE___GT__
+std::map< ros::Time, Vector3d > gt_map;
+void ground_truth_callback( const geometry_msgs::PointStamped::ConstPtr msg )
+{
+    cout << TermColor::YELLOW() << "ground_truth_callback " << msg->header.stamp;
+    cout << "\t" << msg->point.x << ", " << msg->point.y << ", "<< msg->point.z << "  ";
+    cout << TermColor::RESET() << endl;
+
+    gt_map[ msg->header.stamp ] = Vector3d( msg->point.x , msg->point.y , msg->point.z );
+}
+
+
+struct assoc_s
+{
+    ros::Time node_timestamp;
+    Matrix4d corrected_pose;
+    Matrix4d vio_pose;
+
+    Vector3d gt_pose;
+    ros::Time gt_pose_timestamp;
+};
+/////////////////////
+#endif
+
+
 // plots the corrected trajectories, different worlds will have different colored lines
 
 #define opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE 10 //< color the line with worldID
@@ -389,6 +419,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
     // ros::Rate loop_rate(5);
     map<int, vector<Matrix4d> > jmb;
     vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
+    vector< Matrix4d > lbm_fullpose;
     bool published_axis = true;
     while( ros::ok() )
     {
@@ -402,6 +433,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         //clear map
         jmb.clear();
         lbm.clear();
+        lbm_fullpose.clear();
 
         // cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
         int latest_pose_worldid = -1;
@@ -478,6 +510,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
                 jmb[ world_id ].push_back( w_T_c );
                 lbm.push_back( w_T_c.col(3).topRows(3) );
+                lbm_fullpose.push_back( w_T_c );
                 latest_pose_worldid = world_id;
 
                 #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
@@ -545,6 +578,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
                 jmb[ world_id ].push_back( w_TM_i );
                 lbm.push_back( w_TM_i.col(3).topRows(3) );
+                lbm_fullpose.push_back( w_TM_i );
                 latest_pose_worldid = world_id;
 
                 #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
@@ -659,6 +693,135 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         // cerr << "\nSLEEP\n";
         loop_rate.sleep();
     }
+
+
+    #if __CODE___GT__
+
+    // Set this to 1 to enable loggin of final poses,
+    #define __LOGGING___LBM__ 1
+    #if __LOGGING___LBM__
+    // Log LMB
+    vector<assoc_s> _RESULT_;
+    cout << "========[opt_traj_publisher_colored_by_world] logging ========\n";
+    cout << "loop on gt_map\n";
+    int _gt_map_i = 0;
+    //---a
+    for( auto it=gt_map.begin() ; it!= gt_map.end() ; it++ ) {
+        cout << _gt_map_i++ << " : " << it->first << " : " << (it->second).transpose() << endl;
+    }
+
+    ///---b
+    cout << "loop on lbm lbm.size() = " << lbm.size() << " lbm_fullpose.size= "<< lbm_fullpose.size() <<"\n";
+    assert( lbm.size() == lbm_fullpose.size() );
+    for( auto k=0 ; k<lbm.size() ; k++ ) {
+        ros::Time _t = manager->getNodeTimestamp(k);
+        Matrix4d _viopose = manager->getNodePose(k);
+        cout << k << ": " << _t << ": "<< lbm[k].transpose() << "\t" ;
+        cout << PoseManipUtils::prettyprintMatrix4d(lbm_fullpose[k]) << endl;
+
+
+        assoc_s tmp;
+        tmp.corrected_pose = lbm_fullpose[k];
+        tmp.vio_pose = _viopose;
+        tmp.node_timestamp = _t;
+
+
+        //---------------
+        // loop through gt_map and find the gt_pose at this t.
+        // search for `_t` in gt_map.
+        {
+            cout << "\tsearch for `_t`= "<< _t << " in gt_map.\n";
+            int it_i = -1;
+            ros::Duration smallest_diff = ros::Duration( 100000 );
+            int smallest_diff_i = -1;
+            auto gt_map_iterator = gt_map.begin();
+            bool found = false;
+            for( auto it=gt_map.begin() ; it!= gt_map.end() ; it++ ) {
+                it_i++;
+                ros::Duration diff = it->first - _t;
+                if( diff.sec < 0 ) { diff.sec = - diff.sec; diff.nsec = 1000000000 - diff.nsec; }
+                // cout << "\t\tit_i=" << it_i << " diff=" << diff.sec << " " << diff.nsec << "  >>>>>> smallest_diff_i=" << smallest_diff_i << endl;
+
+                if( diff.sec < smallest_diff.sec || (diff.sec == smallest_diff.sec && abs(diff.nsec) < abs(smallest_diff.nsec)  ) ) {
+                    smallest_diff = diff;
+                    smallest_diff_i = it_i;
+                    gt_map_iterator = it;
+                }
+                if( (diff.sec == 0  &&  abs(diff.nsec) < 10000000) || (diff.sec == -1  &&  diff.nsec > (1000000000-10000000) )  ) {
+                    // cout << "NodeDataManager::find_indexof_node " << i << " "<< diff.sec << " " << diff.nsec << endl
+                    cout << TermColor::GREEN() << "\tfound " << it->first  << " at idx=" << it_i << endl << TermColor::RESET();
+                    found = true;
+
+                    tmp.gt_pose_timestamp = it->first;
+                    tmp.gt_pose = it->second;
+                    break;
+                }
+
+            }
+
+            if( found == false ) {
+                cout << TermColor::RED() << "\tNOT found, however, smallest_diff=" << smallest_diff << " at idx="<< smallest_diff_i;
+                cout << endl << TermColor::RESET();
+                tmp.gt_pose_timestamp = gt_map_iterator->first;
+                tmp.gt_pose = gt_map_iterator->second;
+            }
+        }
+        //---------
+        // END of search onn gt_map
+        //---------
+
+
+
+        // Result:"
+        _RESULT_.push_back( tmp );
+        cout << TermColor::CYAN() << "Result: \n";
+        cout << "node_timestamp           " << tmp.node_timestamp << endl;
+        cout << "gt_pose_timestamp        " << tmp.gt_pose_timestamp << endl;
+        cout << "gt_pose                  " << (tmp.gt_pose).transpose() << endl;
+        cout << "vio_pose                 " << PoseManipUtils::prettyprintMatrix4d(tmp.vio_pose) << endl;
+        cout << "corrected_pose           " << PoseManipUtils::prettyprintMatrix4d(tmp.corrected_pose) << endl;
+        cout << TermColor::RESET();
+
+    }
+
+
+    // write CSV:
+    std::stringstream buffer_gt;
+    std::stringstream buffer_corrected;
+    std::stringstream buffer_vio;
+
+    for( int j=0 ; j<_RESULT_.size() ; j++ )
+    {
+        // stamp, tx, ty, tz
+        buffer_gt << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].gt_pose(0) << "," << _RESULT_[j].gt_pose(1)<< "," << _RESULT_[j].gt_pose(2) <<endl;
+
+
+        // stamp, tx, ty, tz, qw, qx, qy, qz
+        buffer_corrected << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].corrected_pose(0,3) << "," << _RESULT_[j].corrected_pose(1,3)<< "," << _RESULT_[j].corrected_pose(2,3) << ",";
+        Matrix3d __R = _RESULT_[j].corrected_pose.topLeftCorner(3,3);
+        Quaterniond quat( __R );
+        buffer_corrected << quat.w() << "," << quat.x() << ","<< quat.y() << "," << quat.z() << endl;
+
+
+        buffer_vio << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].vio_pose(0,3) << "," << _RESULT_[j].vio_pose(1,3)<< "," << _RESULT_[j].vio_pose(2,3) << ",";
+        Matrix3d __R2 = _RESULT_[j].vio_pose.topLeftCorner(3,3);
+        Quaterniond quat2( __R );
+        buffer_vio << quat2.w() << "," << quat2.x() << ","<< quat2.y() << "," << quat2.z() << endl;
+    }
+    const string DATA_PATH = "/Bulk_Data/_tmp_posegraph/";
+    RawFileIO::write_string( DATA_PATH+"/gt.csv", buffer_gt.str() );
+    RawFileIO::write_string( DATA_PATH+"/corrected.csv", buffer_corrected.str() );
+    RawFileIO::write_string( DATA_PATH+"/vio_pose.csv", buffer_vio.str() );
+
+
+
+    #endif // __LOGGING___LBM__
+
+    #endif  //__CODE___GT__
+
+
+
+
 }
 
 
@@ -685,12 +848,21 @@ int main( int argc, char ** argv)
     ros::Subscriber sub_loopclosure = nh.subscribe( loopclosure_camera_rel_pose_topic, 1000, &NodeDataManager::loopclosure_pose_callback, manager );
 
 
-    //-- TODO: Also subscribe to tracked features to know if I have been kidnaped.
+    //-- subscribe to tracked features to know if I have been kidnaped. --//
     //  False indicates -> I got kidnapped now
     //  True indicates --> I got unkidnapped.
     string rcvd_kidnap_indicator_topic = string( "/feature_tracker/rcvd_flag_header" );
     ROS_INFO( "Subscribed to kidnap_indicator aka %s", rcvd_kidnap_indicator_topic.c_str() );
     ros::Subscriber sub_kidnap_indicator = nh.subscribe( rcvd_kidnap_indicator_topic, 100, &NodeDataManager::rcvd_kidnap_indicator_callback, manager );
+
+
+    #if __CODE___GT__
+    //--- ground_truth_callback. Sometimes bags may contain GT data, ---//
+    // this will associate the GT data to the pose graph for analysis.
+    string ground_truth_topic = string( "/leica/position" );
+    ROS_INFO( "Subscribed to ground_truth_topic: %s", ground_truth_topic.c_str() );
+    ros::Subscriber  sub_gt_ = nh.subscribe( ground_truth_topic, 100, ground_truth_callback );
+    #endif
 
 
 
@@ -773,6 +945,18 @@ int main( int argc, char ** argv)
 
     #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__
+    // Note: If using roslaunch to launch this node and when LOGGING is enabled,
+    // roslaunch sends a sigterm and kills this thread when ros::ok() returns false ie.
+    // when you press CTRL+C. The timeout is governed by roslaunch.
+    //
+    // If you wish to increase this timeout, you need to edit "/opt/ros/kinetic/lib/python2.7/dist-packages/roslaunch/nodeprocess.py"
+    // then edit these two vars.
+    // _TIMEOUT_SIGINT = 15.0 #seconds
+    // _TIMEOUT_SIGTERM = 2.0 #seconds
+    //          ^^^^ Borrowed from : https://answers.ros.org/question/11353/how-to-delay-escalation-to-sig-term-after-sending-sig-int-to-roslaunch/
+
+
+
     ///// Save Pose Graph for Debugging
     const string DATA_PATH = "/Bulk_Data/_tmp_posegraph/";
 

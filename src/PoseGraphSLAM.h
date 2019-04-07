@@ -369,6 +369,10 @@ public:
         residuals.block(3,0,  3,1) =  T(2.0) * delta_q.vec();
         residuals(6) = T(1.0) * ( T(1.0) - switching_var[0] ); //switching constraint penalty
 
+        // pitch and roll aka residuals(5) and residuals(4) are observable witht he IMU, so
+        // increase the penalty for changing those. This will make them to be nearer to initial estimates.
+        // residuals(4) *= T(5.);
+        // residuals(5) *= T(5.);
 
 
         T s = switching_var[0];

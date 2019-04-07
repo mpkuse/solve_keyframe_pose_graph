@@ -68,6 +68,7 @@ add_executable( keyframe_pose_graph_slam
         src/VizPoseGraph.cpp
         src/utils/PoseManipUtils.cpp
         src/utils/RosMarkerUtils.cpp
+        src/utils/RawFileIO.cpp
         src/Worlds.cpp
         )
 

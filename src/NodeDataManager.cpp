@@ -18,8 +18,6 @@ worlds_handle_raw_ptr = new Worlds();
 
 }
 
-
-
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
     // ROS_INFO( "NodeDataManager::camera_pose_callback");
@@ -221,7 +219,7 @@ void NodeDataManager::print_nodes_lengths() const
 /////////////////////// Utility
 // Loop over each node and return the index of the node which is clossest to the specified stamp
 // This function is not thread-safe. You need to assure thread safety yourself for this.
-int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp )
+int NodeDataManager::find_indexof_node( const vector<ros::Time>& global_nodes_stamps, const ros::Time& stamp ) const
 {
   ros::Duration diff;
   // cout << "find stamp=" << std::setprecision(20) << stamp.toSec();
