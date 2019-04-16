@@ -1,6 +1,6 @@
-# Node for pose graph optimization.
+# Multithreaded Node for pose graph optimization.
 
-This node actually builds up the graph of poses incrementally using odometry edges and loopclosure edges.
+This node actually builds up the graph of poses incrementally using odometry edges (from VIO like [VINS-fusion](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion) ) and loopclosure edges (from place recognition node like [cerebro](https://github.com/mpkuse/cerebro) ).
 It also can handle kidnap and random failure. This is accomplished by keeping track of multiple
 co-ordinate systems and relative poses between the co-ordinate system. Finally whenever new loopclosure
 edges are available, the pose graph is solved. The switching constraint formulation
