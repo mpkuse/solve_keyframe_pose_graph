@@ -111,6 +111,21 @@ bool PoseGraphSLAM::nodePoseExists( int i ) const //< returns if ith node pose e
 
 }
 
+bool PoseGraphSLAM::nodePoseExists__nolock( int i ) const //< returns if ith node pose exist
+{
+#if defined(___OPT_AS_DOUBLE_STAR )
+    // std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    if( i>= 0 && i<_opt_len_ )
+        return true;
+    return false;
+#else
+    // std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    if( i>=0 && i <opt_quat.size() )
+        return true;
+    return false;
+#endif
+
+}
 
 void PoseGraphSLAM::allocate_and_append_new_opt_variable_withpose( const Matrix4d& pose )
 {
@@ -1671,7 +1686,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             int setID_of__world_of_u = manager->getWorldsConstPtr()->find_setID_of_world_i( world_of_u );
 
             // --------------> add odometry residue :  u <---> u-f
-            for( int f=1 ; f<5 ; f++ ){
+            for( int f=1 ; f<6 ; f++ ){
                 int world_of_u_m_f=-1;
                 if( u-f >= 0 )
                     world_of_u_m_f = manager->which_world_is_this( manager->getNodeTimestamp(u-f) );
@@ -1899,7 +1914,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                 continue;
             }
             __reint_node_regularization_info( cout << TermColor::CYAN() << "&&&&&&&&&&&&world#" << ww << " is in setID=" << ww_setid << " with ww_start=" << ww_start << " ww_end=" << ww_end << TermColor::RESET() << endl; )
-            if( (ww_setid >= 0 && ww_setid==ww)  )
+            if( (ww_setid >= 0 && ww_setid==ww)  ) //< Mark only setIDs as constant,
+            // if( ww_setid >= 0  ) //< call all 0th nodes as constant
             {
             __reint_node_regularization_info( cout << "Mark node#" << ww_start << " as constant. \n"; )
             reg_debug_info += "Mark node#" + to_string(ww_start) + " as constant \n";
@@ -1964,13 +1980,23 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         reinit_ceres_problem_onnewloopedge_optimize6DOF_status = 2; // solving in progress.
         eta.tic();
         {
-            std::lock_guard<std::mutex> lk(mutex_opt_vars);
+            // note: ideally you want to acquire the lock before you Solve,
+            // so that other threads do not access the opt_vars through the slam->getPose().
+            // However, since ceres doesnot change the opt variable until the
+            // end it is usually alright to not acquire the block.
+            // By not locking here, the stall in the viz goes away.
+            // If someone has a better suggestion here, feel free to open a
+            // discussion on github-issues.
+
+            // std::lock_guard<std::mutex> lk(mutex_opt_vars);
             ceres::Solve( reint_options, &reint_problem, &reint_summary );
 
             __reint_ceres_solve_info( cout << "summary.termination_type = "<< (ceres::TerminationType::CONVERGENCE == reint_summary.termination_type) << endl; )
             // if( reint_summary.termination_type == ceres::TerminationType::CONVERGENCE )
+            {
                 solved_until = node_len-1;
                 __reint_ceres_solve_info( cout << "solved_until:=" << node_len-1 << endl; )
+            }
 
             if( reint_summary.termination_type == ceres::TerminationType::CONVERGENCE )
                 n_solve_convergences++;

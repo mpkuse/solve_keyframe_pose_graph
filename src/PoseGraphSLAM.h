@@ -97,6 +97,7 @@ public:
     // Get the optimized pose at node i. This function is thread-safe
     const Matrix4d getNodePose( int i ) const; //< this gives the pose from the optimization variable
     bool nodePoseExists( int i ) const; //< returns if ith node pose exist
+    bool nodePoseExists__nolock( int i ) const; //< returns if ith node pose exist
     // bool getNodePose( int i, Matrix4d& ) const; //TODO: removal
     int nNodes() const;
     void getAllNodePose( vector<Matrix4d>& vec_w_T_ci ) const;

@@ -392,8 +392,13 @@ struct opt_traj_publisher_options
     // 10 //< color the line with worldID
     // 12 //< color the line with setID( worldID )
     int line_color_style=10;
+
+
+    // The thickness of the lines
+    float linewidth_multiplier=1.0;
 };
 
+// comment the following #define to remove the code which checks file's exisitance before printing.
 // #define __opt_traj_publisher_colored_by_world___print_on_file_exist
 
 #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
@@ -407,6 +412,8 @@ inline bool exists_test3 (const std::string& name) {
 }
 #endif
 
+//original code
+#if 0
 void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz, const opt_traj_publisher_options& options )
 {
     #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
@@ -466,10 +473,6 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 // Matrix4d w_T_c_optimized;
                 Matrix4d w_T_c;
 
-                // cerr << "world_id=" << world_id << "   ";
-                // cerr << "slam->nodePoseExists("<< i << ") " << slam->nodePoseExists(i) << " ";
-                // cerr << "manager->nodePoseExists(" << i << ") " << manager->nodePoseExists(i ) << " \n";
-
 
                 // If the optimized pose exists use that else use the odometry pose
                 int from_slam_or_from_odom = -1;
@@ -493,10 +496,6 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
                     int last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
                     Matrix4d w_T_last;
-                    // if( slam->nodePoseExists(i)  )
-                    //     w_T_last = slam->getNodePose(last_idx );
-                    // else
-                    //     w_T_last = manager->getNodePose(last_idx );
                     w_T_last = *(jmb.at( -world_id - 1  ).rbegin());
                     Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
                     w_T_c = w_T_last * last_M_i;
@@ -625,7 +624,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 c_b = color[0]/255.;
             }
 
-            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b );
+            viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b, options.linewidth_multiplier );
         }
         // #endif
 
@@ -656,7 +655,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             c_g = color[1]/255.;
             c_b = color[0]/255.;
         }
-        viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b );
+        viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b, options.linewidth_multiplier, 20 );
 
 
         // Publish loop edges
@@ -664,8 +663,8 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         visualization_msgs::Marker linelist_marker;
         RosMarkerUtils::init_line_marker( linelist_marker );
         linelist_marker.ns = "loopedges_on_opt_traj"; linelist_marker.id = 0;
-        linelist_marker.color.r = 0.4;linelist_marker.color.g = 0.2;linelist_marker.color.b = 0.;linelist_marker.color.a = 1.;
-        linelist_marker.scale.x = 0.1;
+        linelist_marker.color.r = 0.42;linelist_marker.color.g = 0.55;linelist_marker.color.b = 0.14;linelist_marker.color.a = 1.;
+        linelist_marker.scale.x = 0.1*options.linewidth_multiplier;
 
         int nloopedgfes = manager->getEdgeLen();
         for( int it=0 ; it<nloopedgfes; it++ ) {
@@ -823,6 +822,445 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
 
 }
+#endif
+
+
+
+void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz, const opt_traj_publisher_options& options )
+{
+    #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+    bool enable_cout = false;
+    #endif
+
+
+
+    ros::Rate loop_rate(20);
+    // ros::Rate loop_rate(5);
+    map<int, vector<Matrix4d> > jmb;
+    vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
+    vector< Matrix4d > lbm_fullpose;
+    bool published_axis = true;
+    while( ros::ok() )
+    {
+        // cout << "[opt_traj_publisher_colored_by_world]---\n";
+        if( manager->getNodeLen() == 0 ) {
+            // cout << "[opt_traj_publisher_colored_by_world]nothing to publish\n";
+            loop_rate.sleep();
+            continue;
+        }
+
+        //clear map
+        jmb.clear();
+        lbm.clear();
+        lbm_fullpose.clear();
+
+        // cerr << "[opt_traj_publisher_colored_by_world]i=0 ; i<"<< manager->getNodeLen() << " ; solvedUntil=" << slam->solvedUntil() <<"\n";
+        int latest_pose_worldid = -1;
+        int ____solvedUntil = slam->solvedUntil(); //note: solvedUntil is the index until which posegraph was solved
+        int ____solvedUntil_worldid =  manager->which_world_is_this( manager->getNodeTimestamp(____solvedUntil) );
+        bool ____solvedUntil_worldid_is_neg = false;
+        if( ____solvedUntil_worldid < 0 ) { /*____solvedUntil_worldid = -____solvedUntil_worldid - 1;*/ ____solvedUntil_worldid_is_neg=true; }
+        // cerr << "\t[opt_traj_publisher_colored_by_world] slam->solvedUntil=" << ____solvedUntil << "  ____solvedUntil_worldid" << ____solvedUntil_worldid << endl;
+
+        #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+        if( exists_test3( "/app/xxx") )
+            enable_cout = true;
+        else
+            enable_cout = false;
+
+        if( enable_cout ) {
+        // cout << "[opt_traj_publisher_colored_by_world] i=0" << " i<"<<manager->getNodeLen() ;
+        cout << "____solvedUntil=" << ____solvedUntil << "\t";
+        cout << "____solvedUntil_worldid=" << ____solvedUntil_worldid << "\t";
+        cout << "__slam->get_reinit_ceres_problem_onnewloopedge_optimize6DOF_status=" << slam->get_reinit_ceres_problem_onnewloopedge_optimize6DOF_status() << "\t";
+        cout << endl;
+        }
+        #endif
+
+
+        for( int i=0 ; i<manager->getNodeLen() ; i++ )
+        {
+            int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+            // cout << "i=" << i << " world#" << world_id << endl;// << " w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << endl;
+
+
+            /*
+            if( slam->get_reinit_ceres_problem_onnewloopedge_optimize6DOF_status() == 2 ) {
+                cout << TermColor::iYELLOW() << "[main::opt_traj_publisher_colored_by_world] I have detected ceres::Solve() is in progress. This is the cause of thread blocking....avoiding this by break" << TermColor::RESET() << endl;
+                break;
+            }
+            */
+
+            // const Matrix4d ___slam_getNodePose_i = slam->getNodePose( i );
+            // bool ___slam_nodePoseExists_i = slam->nodePoseExists(i);
+
+
+            // i>=0 and i<solvedUntil()
+            if( i>=0 && i<= ____solvedUntil ) {
+                // Matrix4d w_T_c_optimized;
+                Matrix4d w_T_c;
+
+
+                // If the optimized pose exists use that else use the odometry pose
+                int from_slam_or_from_odom = -1;
+                if( world_id >= 0 ) {
+                    if( slam->nodePoseExists(i) /*___slam_nodePoseExists_i*/ ) {
+                        w_T_c = slam->getNodePose( i );
+                        /*w_T_c = ___slam_getNodePose_i;*/
+                        // cerr << "w_T_c_optimized=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                        from_slam_or_from_odom = 1;
+                    } else {
+                        if( manager->nodePoseExists(i )  ) {
+                            w_T_c = manager->getNodePose( i );
+                            // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
+                            from_slam_or_from_odom = 2;
+                        }
+                    }
+                } else {
+                    // kidnapped worlds viz, -1, -2 etc.
+                    // use the last pose and add the odometry to it
+                    // TODO
+                    from_slam_or_from_odom = 3;
+
+                    int last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 );
+                    Matrix4d w_T_last;
+                    w_T_last = *(jmb.at( -world_id - 1  ).rbegin());
+                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
+                    w_T_c = w_T_last * last_M_i;
+
+
+                }
+
+
+                if( jmb.count( world_id ) ==  0 )
+                    jmb[ world_id ] = vector<Matrix4d>();
+
+                jmb[ world_id ].push_back( w_T_c );
+                lbm.push_back( w_T_c.col(3).topRows(3) );
+                lbm_fullpose.push_back( w_T_c );
+                latest_pose_worldid = world_id;
+
+                #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+                if( enable_cout )
+                cout << TermColor::RED() << i << ":" <<  world_id << "  (from_slam_or_from_odom=" << from_slam_or_from_odom << " w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl << TermColor::RESET();
+                #endif
+
+            }
+
+
+            // i>solvedUntil() < manager->getNodeLen() only odometry available here.
+
+            if( i>(____solvedUntil)  ) {
+                int last_idx=-1;
+                Matrix4d w_TM_i;
+
+
+
+                if( ____solvedUntil == 0 ) {
+                    w_TM_i = manager->getNodePose( i );
+                } else {
+                    if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
+                        last_idx = ____solvedUntil;}
+                    else if( world_id >=0 && ____solvedUntil_worldid != world_id  ) {
+                        w_TM_i = manager->getNodePose( i );
+                    }
+                    else if( world_id < 0 ) {
+                        // this is the kidnaped node
+                        last_idx = manager->nodeidx_of_world_i_ended( -world_id - 1 ); // only this in working code
+
+                        if( !( last_idx >= 0 && last_idx < manager->getNodeLen() && i >=0 && i<manager->getNodeLen()) ) {
+                            cout << "ERROR. last_idx=" << last_idx << endl;
+                            manager->getWorldsConstPtr()->print_summary( 2);
+                            manager->print_worlds_info(2);
+                            assert( last_idx >= 0 && last_idx < manager->getNodeLen() && i >=0 && i<manager->getNodeLen() );
+                        }
+
+                        w_TM_i = *(jmb[ -world_id-1 ].rbegin()) * ( manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i ) ) ;
+                        last_idx = -1;
+
+                    } else {
+                        cout << "\nopt_traj_publisher_colored_by_world impossivle\n";
+                        exit(2);
+                    }
+
+                }
+
+                if( last_idx >= 0 ) {
+                    Matrix4d w_T_last;
+                    if( slam->nodePoseExists(last_idx) )
+                        w_T_last = slam->getNodePose(last_idx );
+                    else
+                        w_T_last = manager->getNodePose(last_idx );
+
+                    Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
+                    w_TM_i = w_T_last * last_M_i;
+                }
+
+
+
+                if( jmb.count( world_id ) ==  0 )
+                    jmb[ world_id ] = vector<Matrix4d>();
+
+
+
+                jmb[ world_id ].push_back( w_TM_i );
+                lbm.push_back( w_TM_i.col(3).topRows(3) );
+                lbm_fullpose.push_back( w_TM_i );
+                latest_pose_worldid = world_id;
+
+                #ifdef __opt_traj_publisher_colored_by_world___print_on_file_exist
+                if( enable_cout )
+                cout << i << ":" << world_id << "  w_TM_i=" << PoseManipUtils::prettyprintMatrix4d( w_TM_i ) << "  last_idx="<<  last_idx << endl;
+                #endif
+            }
+
+
+        }
+
+
+        //---
+        //--- Publish jmb
+        //---
+        if( jmb.size() == 0 )
+        {
+                // cout << "[opt_traj_publisher_colored_by_world] not publishing because jmb.size is zero\n";
+        }
+        else
+        {
+                // cout << "[opt_traj_publisher_colored_by_world]publish\n";
+
+            // collect data to publish
+            for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+                // if( it->first < 0 ) //skip publishing kidnapped part.
+                    // continue;
+                string ns = "world#"+to_string( it->first );
+
+                float c_r=0., c_g=0., c_b=0.;
+                int rng=-1;
+                if( options.line_color_style == 10 )
+                    rng = it->first; //color by world id WorldID
+                else if( options.line_color_style == 12 )
+                    rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+                else {
+                    cout << TermColor::RED() << "opt_traj_publisher_colored_by_world ERROR. invalid option `opt_traj_publisher_options`. expected either 10 or 12.\n";
+                    exit( 1 );
+                }
+
+                // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+                // int rng = it->first; //color by world id WorldID
+                // #endif
+                //
+                // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+                // int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first ); //color by setID
+                // #endif
+                if( rng >= 0 ) {
+                    cv::Scalar color = FalseColors::randomColor( rng );
+                    c_r = color[2]/255.;
+                    c_g = color[1]/255.;
+                    c_b = color[0]/255.;
+                }
+
+                viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b, options.linewidth_multiplier );
+            }
+            // #endif
+
+            // Publish Camera visual
+            Matrix4d wi_T_latest = *( jmb.at( latest_pose_worldid ).rbegin() );
+            float c_r=0., c_g=0., c_b=0.;
+            int rng=-1;
+            if( options.line_color_style == 10 )
+                rng = latest_pose_worldid;
+            else if( options.line_color_style == 12 )
+                rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
+            else {
+                cout << TermColor::RED() << "opt_traj_publisher_colored_by_world ERROR. invalid option `opt_traj_publisher_options`. expected either 10 or 12.\n";
+                exit( 1 );
+            }
+
+
+            // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 10
+            // int rng = latest_pose_worldid;
+            // #endif
+            //
+            // #if opt_traj_publisher_colored_by_world_LINE_COLOR_STYLE == 12
+            // int rng = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid ); //color by setID
+            // #endif
+            if( rng >= 0 ) {
+                cv::Scalar color = FalseColors::randomColor( rng );
+                c_r = color[2]/255.;
+                c_g = color[1]/255.;
+                c_b = color[0]/255.;
+            }
+            viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b, options.linewidth_multiplier, 20 );
+
+
+            // Publish loop edges
+            // TODO: in the future publish intra-world loopedges in different color and interworld as different color
+            visualization_msgs::Marker linelist_marker;
+            RosMarkerUtils::init_line_marker( linelist_marker );
+            linelist_marker.ns = "loopedges_on_opt_traj"; linelist_marker.id = 0;
+            linelist_marker.color.r = 0.42;linelist_marker.color.g = 0.55;linelist_marker.color.b = 0.14;linelist_marker.color.a = 1.;
+            linelist_marker.scale.x = 0.1*options.linewidth_multiplier;
+
+            int nloopedgfes = manager->getEdgeLen();
+            for( int it=0 ; it<nloopedgfes; it++ ) {
+                auto pair = manager->getEdgeIdxInfo( it );
+                int __a = pair.first;
+                int __b = pair.second;
+                Vector3d ____apose = lbm[__a];
+                Vector3d ____bpose = lbm[__b];
+
+                RosMarkerUtils::add_point_to_marker(  ____apose, linelist_marker, false );
+                RosMarkerUtils::add_point_to_marker(  ____bpose, linelist_marker, false );
+            }
+            viz->publishThisVisualMarker( linelist_marker );
+
+
+            if( published_axis || rand() % 100 == 0 ) {
+                Matrix4d _axis_pose = Matrix4d::Identity();
+                // odm_axis_pose(0,3) += offset_x; odm_axis_pose(1,3) += offset_y; odm_axis_pose(2,3) += offset_z;
+                viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0  );
+                published_axis = false;
+            }
+
+        }
+
+
+        // book keeping
+        // cerr << "\nSLEEP\n";
+        loop_rate.sleep();
+    }
+
+
+    #if __CODE___GT__
+
+    // Set this to 1 to enable loggin of final poses,
+    #define __LOGGING___LBM__ 1
+    #if __LOGGING___LBM__
+    // Log LMB
+    vector<assoc_s> _RESULT_;
+    cout << "========[opt_traj_publisher_colored_by_world] logging ========\n";
+    cout << "loop on gt_map\n";
+    int _gt_map_i = 0;
+    //---a
+    for( auto it=gt_map.begin() ; it!= gt_map.end() ; it++ ) {
+        cout << _gt_map_i++ << " : " << it->first << " : " << (it->second).transpose() << endl;
+    }
+
+    ///---b
+    cout << "loop on lbm lbm.size() = " << lbm.size() << " lbm_fullpose.size= "<< lbm_fullpose.size() <<"\n";
+    assert( lbm.size() == lbm_fullpose.size() );
+    for( auto k=0 ; k<lbm.size() ; k++ ) {
+        ros::Time _t = manager->getNodeTimestamp(k);
+        Matrix4d _viopose = manager->getNodePose(k);
+        cout << k << ": " << _t << ": "<< lbm[k].transpose() << "\t" ;
+        cout << PoseManipUtils::prettyprintMatrix4d(lbm_fullpose[k]) << endl;
+
+
+        assoc_s tmp;
+        tmp.corrected_pose = lbm_fullpose[k];
+        tmp.vio_pose = _viopose;
+        tmp.node_timestamp = _t;
+
+
+        //---------------
+        // loop through gt_map and find the gt_pose at this t.
+        // search for `_t` in gt_map.
+        {
+            cout << "\tsearch for `_t`= "<< _t << " in gt_map.\n";
+            int it_i = -1;
+            ros::Duration smallest_diff = ros::Duration( 100000 );
+            int smallest_diff_i = -1;
+            auto gt_map_iterator = gt_map.begin();
+            bool found = false;
+            for( auto it=gt_map.begin() ; it!= gt_map.end() ; it++ ) {
+                it_i++;
+                ros::Duration diff = it->first - _t;
+                if( diff.sec < 0 ) { diff.sec = - diff.sec; diff.nsec = 1000000000 - diff.nsec; }
+                // cout << "\t\tit_i=" << it_i << " diff=" << diff.sec << " " << diff.nsec << "  >>>>>> smallest_diff_i=" << smallest_diff_i << endl;
+
+                if( diff.sec < smallest_diff.sec || (diff.sec == smallest_diff.sec && abs(diff.nsec) < abs(smallest_diff.nsec)  ) ) {
+                    smallest_diff = diff;
+                    smallest_diff_i = it_i;
+                    gt_map_iterator = it;
+                }
+                if( (diff.sec == 0  &&  abs(diff.nsec) < 10000000) || (diff.sec == -1  &&  diff.nsec > (1000000000-10000000) )  ) {
+                    // cout << "NodeDataManager::find_indexof_node " << i << " "<< diff.sec << " " << diff.nsec << endl
+                    cout << TermColor::GREEN() << "\tfound " << it->first  << " at idx=" << it_i << endl << TermColor::RESET();
+                    found = true;
+
+                    tmp.gt_pose_timestamp = it->first;
+                    tmp.gt_pose = it->second;
+                    break;
+                }
+
+            }
+
+            if( found == false ) {
+                cout << TermColor::RED() << "\tNOT found, however, smallest_diff=" << smallest_diff << " at idx="<< smallest_diff_i;
+                cout << endl << TermColor::RESET();
+                tmp.gt_pose_timestamp = gt_map_iterator->first;
+                tmp.gt_pose = gt_map_iterator->second;
+            }
+        }
+        //---------
+        // END of search onn gt_map
+        //---------
+
+
+
+        // Result:"
+        _RESULT_.push_back( tmp );
+        cout << TermColor::CYAN() << "Result: \n";
+        cout << "node_timestamp           " << tmp.node_timestamp << endl;
+        cout << "gt_pose_timestamp        " << tmp.gt_pose_timestamp << endl;
+        cout << "gt_pose                  " << (tmp.gt_pose).transpose() << endl;
+        cout << "vio_pose                 " << PoseManipUtils::prettyprintMatrix4d(tmp.vio_pose) << endl;
+        cout << "corrected_pose           " << PoseManipUtils::prettyprintMatrix4d(tmp.corrected_pose) << endl;
+        cout << TermColor::RESET();
+
+    }
+
+
+    // write CSV:
+    std::stringstream buffer_gt;
+    std::stringstream buffer_corrected;
+    std::stringstream buffer_vio;
+
+    for( int j=0 ; j<_RESULT_.size() ; j++ )
+    {
+        // stamp, tx, ty, tz
+        buffer_gt << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].gt_pose(0) << "," << _RESULT_[j].gt_pose(1)<< "," << _RESULT_[j].gt_pose(2) <<endl;
+
+
+        // stamp, tx, ty, tz, qw, qx, qy, qz
+        buffer_corrected << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].corrected_pose(0,3) << "," << _RESULT_[j].corrected_pose(1,3)<< "," << _RESULT_[j].corrected_pose(2,3) << ",";
+        Matrix3d __R = _RESULT_[j].corrected_pose.topLeftCorner(3,3);
+        Quaterniond quat( __R );
+        buffer_corrected << quat.w() << "," << quat.x() << ","<< quat.y() << "," << quat.z() << endl;
+
+
+        buffer_vio << long(_RESULT_[j].node_timestamp.toSec() * 1E9) << "," << _RESULT_[j].vio_pose(0,3) << "," << _RESULT_[j].vio_pose(1,3)<< "," << _RESULT_[j].vio_pose(2,3) << ",";
+        Matrix3d __R2 = _RESULT_[j].vio_pose.topLeftCorner(3,3);
+        Quaterniond quat2( __R );
+        buffer_vio << quat2.w() << "," << quat2.x() << ","<< quat2.y() << "," << quat2.z() << endl;
+    }
+    const string DATA_PATH = "/Bulk_Data/_tmp_posegraph/";
+    RawFileIO::write_string( DATA_PATH+"/gt.csv", buffer_gt.str() );
+    RawFileIO::write_string( DATA_PATH+"/corrected.csv", buffer_corrected.str() );
+    RawFileIO::write_string( DATA_PATH+"/vio_pose.csv", buffer_vio.str() );
+
+
+
+    #endif // __LOGGING___LBM__
+
+    #endif  //__CODE___GT__
+
+
+
+
+}
+
 
 
 int main( int argc, char ** argv)
@@ -914,7 +1352,10 @@ int main( int argc, char ** argv)
     std::thread th5( monitor_disjoint_set_datastructure, manager, viz );
 
     opt_traj_publisher_options options;
+    // 10 //< color the line with worldID
+    // 12 //< color the line with setID( worldID )
     options.line_color_style = 10;
+    options.linewidth_multiplier = 2.0;
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 

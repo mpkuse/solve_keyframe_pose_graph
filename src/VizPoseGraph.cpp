@@ -65,14 +65,14 @@ void VizPoseGraph::publishLastNNodes( int n )
 
 
 void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
-    const string& ns, float r, float g, float b ) const
+    const string& ns, float r, float g, float b, float linewidth_multiplier ) const
 {
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
     RosMarkerUtils::init_line_marker( marker );
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x = 0.08;
+    marker.scale.x = 0.08*linewidth_multiplier;
     marker.ns = ns;
 
 
@@ -445,13 +445,13 @@ void VizPoseGraph::publishSlamResidueVisual( int n ) const
 
 
 
-void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b )
+void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b, float linewidth_multiplier, float camera_size_multiplier )
 {
     visualization_msgs::Marker marker2 ;
-    RosMarkerUtils::init_camera_marker( marker2, 10 );
+    RosMarkerUtils::init_camera_marker( marker2, camera_size_multiplier );
     RosMarkerUtils::setpose_to_marker( wTc, marker2 );
     RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
-    marker2.scale.x = 0.08;
+    marker2.scale.x = 0.08*linewidth_multiplier;
     marker2.id = 0;
     marker2.ns = ns+string("_cam_visual");
     pub_pgraph.publish( marker2 );
