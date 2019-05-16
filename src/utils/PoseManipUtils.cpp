@@ -132,6 +132,14 @@ void PoseManipUtils::eigenmat_to_rawyprt( const Matrix4d& T, double * ypr, doubl
   t[2] = T(2,3);
 }
 
+
+void PoseManipUtils::eigenmat_to_rawyprt( const Matrix4d& T, Vector3d& ypr, Vector3d& t) // input ypr must be in degrees.
+{
+  assert( T(3,3) == 1 );
+  ypr = R2ypr( T.topLeftCorner<3,3>() );
+  t << T(0,3), T(1,3), T(2,3);
+}
+
 Vector3d PoseManipUtils::R2ypr( const Matrix3d& R)
 {
   Eigen::Vector3d n = R.col(0);
@@ -148,6 +156,7 @@ Vector3d PoseManipUtils::R2ypr( const Matrix3d& R)
 
   return ypr / M_PI * 180.0;
 }
+
 
 
 Matrix3d PoseManipUtils::ypr2R( const Vector3d& ypr)

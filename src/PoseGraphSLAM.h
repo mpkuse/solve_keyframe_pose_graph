@@ -97,7 +97,6 @@ public:
     // Get the optimized pose at node i. This function is thread-safe
     const Matrix4d getNodePose( int i ) const; //< this gives the pose from the optimization variable
     bool nodePoseExists( int i ) const; //< returns if ith node pose exist
-    bool nodePoseExists__nolock( int i ) const; //< returns if ith node pose exist
     // bool getNodePose( int i, Matrix4d& ) const; //TODO: removal
     int nNodes() const;
     void getAllNodePose( vector<Matrix4d>& vec_w_T_ci ) const;
@@ -399,6 +398,204 @@ private:
     Matrix4d observed__c1_T_c2;
     Quaterniond observed_c1_q_c2;
     Matrix<double,3,1> observed_c1_t_c2;
+
+    double weight;
+};
+
+
+// output is in degrees
+template <typename T>
+Matrix<T,3,1> R2ypr( const Matrix<T,3,3>& R)
+{
+  Matrix<T,3,1> n = R.col(0);
+  Matrix<T,3,1> o = R.col(1);
+  Matrix<T,3,1> a = R.col(2);
+
+  Matrix<T,3,1> ypr(3);
+  T y = atan2(n(1), n(0));
+  T p = atan2(-n(2), n(0) * cos(y) + n(1) * sin(y));
+  T r = atan2(a(0) * sin(y) - a(1) * cos(y), -o(0) * sin(y) + o(1) * cos(y));
+  ypr(0) = y;
+  ypr(1) = p;
+  ypr(2) = r;
+
+  return ypr / T(M_PI) * T(180.0);
+}
+
+
+
+
+
+// In this residue function, internally we rely on the
+// Euler angle representation and not Quaternions as before.
+class FourDOFError
+{
+public:
+    FourDOFError( const Matrix4d& _observed__c1_T_c2, const double _weight=1.0 ) : observed__c1_T_c2( _observed__c1_T_c2 )
+    {
+        // Convert c1_T_c2 to Euler Angle representation
+        PoseManipUtils::eigenmat_to_rawyprt( _observed__c1_T_c2, observed_c1_ypr_c2, observed_c1_t_c2 );
+        observed_c1_q_c2 = Quaterniond( _observed__c1_T_c2.topLeftCorner<3,3>() );
+
+        weight = _weight;
+    }
+
+    // q1, t1 : w_T_c1
+    // q2, t2 : w_T_c2
+    template <typename T>
+    bool operator() ( const T* const q1, const T* const t1,
+                      const T* const q2, const T* const t2,
+                      T* residue_ptr ) const
+    {
+        // Eigen:
+        // Note the order of the arguments: the real w coefficient first,
+        // while internally the coefficients are stored in the following order: [x, y, z, w]
+
+        // q1,t1 --> w_T_c1
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_1( t1 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_1( q1 );
+
+        // q2,t2 --> w_T_c2
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_2( t2 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_2( q2 );
+
+        // relative transforms between the 2 frames
+        Quaternion<T> q_1_inverse = q_1.conjugate();
+        Quaternion<T> q_12_estimated = q_1_inverse * q_2;
+        Matrix<T,3,1> p_12_estimated = q_1_inverse * (p_2 - p_1);
+
+        // compute error between orientations estimates
+        Quaternion<T> delta_q = q_12_estimated.conjugate() * observed_c1_q_c2.cast<T>();
+        Matrix<T,3,1> delta_t = q_12_estimated.conjugate() * ( observed_c1_t_c2.cast<T>() - p_12_estimated );
+
+        // penalty - A
+        Eigen::Map<Matrix<T,4,1> > residuals( residue_ptr );
+        // residuals.block(0,0,  3,1) =  delta_t; // translation error
+        residuals(0) = delta_t(0);
+        residuals(1) = delta_t(1);
+        residuals(2) = delta_t(2);
+
+
+        // convert Quaternion to euler angle using rotation matrix as intermediate
+        Matrix<T,3,3> delta_Rot = delta_q.toRotationMatrix();
+        Matrix<T,3,1> delta_ypr = R2ypr( delta_Rot );
+        residuals(3) = T(4.) * delta_ypr(0);
+        // residuals(4) = T(10.0);
+        // residuals(5) = T(10.0);
+
+        residuals *= T(weight);
+
+        return true;
+
+    }
+
+
+    static ceres::CostFunction* Create( const Matrix4d& _observed__c1_T_c2, const double weight=1.0 )
+    {
+      return ( new ceres::AutoDiffCostFunction<FourDOFError,4,4,3,4,3>
+        (
+          new FourDOFError(_observed__c1_T_c2, weight )
+        )
+      );
+    }
+
+
+private:
+
+
+    Matrix4d observed__c1_T_c2;
+    Quaterniond observed_c1_q_c2;
+    Vector3d observed_c1_ypr_c2;
+    Vector3d observed_c1_t_c2;
+
+    double weight;
+};
+
+
+// In this residue function, internally we rely on the
+// Euler angle representation and not Quaternions as before.
+class FourDOFErrorWithSwitchingConstraints
+{
+public:
+    FourDOFErrorWithSwitchingConstraints( const Matrix4d& _observed__c1_T_c2, const double _weight=1.0 ) : observed__c1_T_c2( _observed__c1_T_c2 )
+    {
+        // Convert c1_T_c2 to Euler Angle representation
+        PoseManipUtils::eigenmat_to_rawyprt( _observed__c1_T_c2, observed_c1_ypr_c2, observed_c1_t_c2 );
+        observed_c1_q_c2 = Quaterniond( _observed__c1_T_c2.topLeftCorner<3,3>() );
+
+        weight = _weight;
+    }
+
+    // q1, t1 : w_T_c1
+    // q2, t2 : w_T_c2
+    template <typename T>
+    bool operator() ( const T* const q1, const T* const t1,
+                      const T* const q2, const T* const t2,
+                      const T* const switching_var,
+                      T* residue_ptr ) const
+    {
+        // Eigen:
+        // Note the order of the arguments: the real w coefficient first,
+        // while internally the coefficients are stored in the following order: [x, y, z, w]
+
+        // q1,t1 --> w_T_c1
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_1( t1 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_1( q1 );
+
+        // q2,t2 --> w_T_c2
+        Eigen::Map<const Eigen::Matrix<T,3,1> > p_2( t2 );
+        Eigen::Map<const Eigen::Quaternion<T> > q_2( q2 );
+
+        // relative transforms between the 2 frames
+        Quaternion<T> q_1_inverse = q_1.conjugate();
+        Quaternion<T> q_12_estimated = q_1_inverse * q_2;
+        Matrix<T,3,1> p_12_estimated = q_1_inverse * (p_2 - p_1);
+
+        // compute error between orientations estimates
+        Quaternion<T> delta_q = q_12_estimated.conjugate() * observed_c1_q_c2.cast<T>();
+        Matrix<T,3,1> delta_t = q_12_estimated.conjugate() * ( observed_c1_t_c2.cast<T>() - p_12_estimated );
+
+        // penalty - A
+        Eigen::Map<Matrix<T,5,1> > residuals( residue_ptr );
+        // residuals.block(0,0,  3,1) =  delta_t; // translation error
+        residuals(0) = delta_t(0);
+        residuals(1) = delta_t(1);
+        residuals(2) = delta_t(2);
+
+        residuals(4) = T(1.0) * ( T(1.0) - switching_var[0] ); //switching constraint penalty
+
+        // convert Quaternion to euler angle using rotation matrix as intermediate
+        Matrix<T,3,3> delta_Rot = delta_q.toRotationMatrix();
+        Matrix<T,3,1> delta_ypr = R2ypr( delta_Rot );
+        residuals(3) = T(4.) * delta_ypr(0);
+        // residuals(4) = T(10.0);
+        // residuals(5) = T(10.0);
+
+
+        T s = switching_var[0];
+        residuals *= s; //* T(weight);
+        return true;
+
+    }
+
+
+    static ceres::CostFunction* Create( const Matrix4d& _observed__c1_T_c2, const double weight=1.0 )
+    {
+      return ( new ceres::AutoDiffCostFunction<FourDOFErrorWithSwitchingConstraints,5,4,3,4,3,1>
+        (
+          new FourDOFErrorWithSwitchingConstraints(_observed__c1_T_c2, weight )
+        )
+      );
+    }
+
+
+private:
+
+
+    Matrix4d observed__c1_T_c2;
+    Quaterniond observed_c1_q_c2;
+    Vector3d observed_c1_ypr_c2;
+    Vector3d observed_c1_t_c2;
 
     double weight;
 };

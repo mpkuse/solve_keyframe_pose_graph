@@ -111,22 +111,6 @@ bool PoseGraphSLAM::nodePoseExists( int i ) const //< returns if ith node pose e
 
 }
 
-bool PoseGraphSLAM::nodePoseExists__nolock( int i ) const //< returns if ith node pose exist
-{
-#if defined(___OPT_AS_DOUBLE_STAR )
-    // std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    if( i>= 0 && i<_opt_len_ )
-        return true;
-    return false;
-#else
-    // std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    if( i>=0 && i <opt_quat.size() )
-        return true;
-    return false;
-#endif
-
-}
-
 void PoseGraphSLAM::allocate_and_append_new_opt_variable_withpose( const Matrix4d& pose )
 {
 #if defined(___OPT_AS_DOUBLE_STAR )
@@ -1662,6 +1646,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
             // simply add edge residue
             ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            // ceres::CostFunction * cost_function = FourDOFErrorWithSwitchingConstraints::Create( bTa, weight );
             reint_problem.AddResidualBlock( cost_function, NULL,
                 get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
                 get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first),
@@ -1719,6 +1704,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 
                 // cost
                 ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
+                // ceres::CostFunction * cost_function = FourDOFError::Create( u_M_umf, odom_edge_weight  );
                 reint_problem.AddResidualBlock( cost_function, NULL,
                     get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
                     get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );

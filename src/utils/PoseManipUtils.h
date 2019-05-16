@@ -32,6 +32,7 @@ public:
     static void rawyprt_to_eigenmat( const Vector3d& eigen_ypr_degrees, const Vector3d& t, Matrix4d& dstT );
 
     static void eigenmat_to_rawyprt( const Matrix4d& T, double * ypr, double * t); // input ypr must be in degrees.
+    static void eigenmat_to_rawyprt( const Matrix4d& T, Vector3d& ypr, Vector3d& t); // input ypr must be in degrees.
     static Vector3d R2ypr( const Matrix3d& R);
     static Matrix3d ypr2R( const Vector3d& ypr); // input ypr must be in degrees.
     static void prettyprintPoseMatrix( const Matrix4d& M );
@@ -62,6 +63,7 @@ public:
     static bool string_to_eigenmat( const string mat_string, Matrix4d& mat );
     static bool string_to_eigenmat( const string mat_string, Matrix<double,6,6>& mat );
     // static bool string_to_eigenmat( const string mat_string, MatrixXd& mat );
+
 
 
 private:

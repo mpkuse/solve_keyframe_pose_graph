@@ -1355,7 +1355,7 @@ int main( int argc, char ** argv)
     // 10 //< color the line with worldID
     // 12 //< color the line with setID( worldID )
     options.line_color_style = 10;
-    options.linewidth_multiplier = 2.0;
+    options.linewidth_multiplier = 0.25;
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 
@@ -1384,7 +1384,7 @@ int main( int argc, char ** argv)
 
 
 
-    #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
+    #define __LOGGING__ 1 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__
     // Note: If using roslaunch to launch this node and when LOGGING is enabled,
     // roslaunch sends a sigterm and kills this thread when ros::ok() returns false ie.
