@@ -1,27 +1,28 @@
 #include "PoseGraphSLAM.h"
 
-// PoseGraphSLAM::PoseGraphSLAM( const NodeDataManager* _manager ): manager( _manager )
-// {
-//     solved_until = 0;
-// }
 PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager ): manager( _manager )
 {
     solved_until = 0;
 
+    #ifdef __new_optimize6DOF__
     new_optimize6DOF_disable();
+    #endif
+
     reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
     reinit_ceres_problem_onnewloopedge_optimize6DOF_status = -1;
 
 
-    #if defined(___OPT_AS_DOUBLE_STAR)
-    // int n = 3000;
+
+    #ifdef __USE_YPR_REP
+    this->_opt_ypr_ = new double [3*30000];
+    #else
     this->_opt_quat_ = new double [4*30000];
+    #endif
     this->_opt_t_ = new double [3*30000];
     this->_opt_len_ = 0;
 
     this->_opt_switch_ = new double [5000]; //1 per loop edge
     _opt_switch_len_ = 0;
-    #endif
 
 }
 
@@ -44,76 +45,60 @@ void PoseGraphSLAM::getAllNodePose( vector<Matrix4d>& w_T_ci ) const
 int PoseGraphSLAM::nNodes() const
 {
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    #if defined(___OPT_AS_DOUBLE_STAR)
     return _opt_len_;
-    #else
-    return opt_quat.size();
-    #endif
+
 }
 
 
-/* TODO: Removal
-bool PoseGraphSLAM::getNodePose( int i, Matrix4d& out_w_T_nodei ) const
-{
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-
-    assert( i < nNodes() );
-    if( i<0 || i>= nNodes() )
-        return false;
-
-    // qi,ti --> w_T_ci
-    Eigen::Map<const Eigen::Quaternion<double> > q_1( opt_quat[i] );
-    Eigen::Map<const Eigen::Matrix<double,3,1> > p_1( opt_t[i] );
-
-    out_w_T_nodei = Matrix4d::Identity();
-    out_w_T_nodei.topLeftCorner<3,3>() = q_1.toRotationMatrix();
-    out_w_T_nodei.col(3).head(3) = p_1;
-
-    return true;
-}
-*/
 
 // It is on purpose I am returning const Matrix4d and not const Matrix4d&
 const Matrix4d PoseGraphSLAM::getNodePose( int i ) const
 {
-
-#if defined(___OPT_AS_DOUBLE_STAR)
+#ifdef __USE_YPR_REP
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
+    assert( i>=0 && i<_opt_len_ );
+    Matrix4d w_T_cam;
+    PoseManipUtils::rawyprt_to_eigenmat( (const double*)&_opt_ypr_[3*i], (const double*)&_opt_t_[3*i], w_T_cam );
+    return w_T_cam;
+#else
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
     assert( i>=0 && i<_opt_len_ );
     Matrix4d w_T_cam;
     PoseManipUtils::raw_xyzw_to_eigenmat( (const double*)&_opt_quat_[4*i], (const double*)&_opt_t_[3*i], w_T_cam );
     return w_T_cam;
 
-#else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    assert( i>=0 && i <opt_quat.size() );
 
-    Matrix4d w_T_cam;
-    PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[i], opt_t[i], w_T_cam );
-
-    return w_T_cam;
-#endif
+#endif //__USE_YPR_REP
 }
 
 bool PoseGraphSLAM::nodePoseExists( int i ) const //< returns if ith node pose exist
 {
-#if defined(___OPT_AS_DOUBLE_STAR )
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
     if( i>= 0 && i<_opt_len_ )
         return true;
     return false;
-#else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    if( i>=0 && i <opt_quat.size() )
-        return true;
-    return false;
-#endif
+
 
 }
 
 void PoseGraphSLAM::allocate_and_append_new_opt_variable_withpose( const Matrix4d& pose )
 {
-#if defined(___OPT_AS_DOUBLE_STAR )
+    #ifdef __USE_YPR_REP
+    double i_opt_ypr[5], i_opt_t[5];
+    PoseManipUtils::eigenmat_to_rawyprt( pose, (double*)i_opt_ypr, (double*) i_opt_t );
+    int ppp = nNodes();
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        _opt_ypr_[3*ppp+0] = i_opt_ypr[0];
+        _opt_ypr_[3*ppp+1] = i_opt_ypr[1];
+        _opt_ypr_[3*ppp+2] = i_opt_ypr[2];
+
+        _opt_t_[3*ppp+0] = i_opt_t[0];
+        _opt_t_[3*ppp+1] = i_opt_t[1];
+        _opt_t_[3*ppp+2] = i_opt_t[2];
+        _opt_len_++;
+    }
+    #else
 
     double i_opt_quat[5], i_opt_t[5];
     PoseManipUtils::eigenmat_to_raw_xyzw( pose, (double*)i_opt_quat, (double*)i_opt_t );
@@ -131,59 +116,61 @@ void PoseGraphSLAM::allocate_and_append_new_opt_variable_withpose( const Matrix4
         _opt_len_++;
     }
 
-#else
-
-    // step-1: new i_opt_quat[5], new i_opt_t[5]
-    double * i_opt_quat = new double[5];
-    double * i_opt_t = new double[5];
-
-    // step-2: pose--> i_opt_quat, i_opt_t
-    PoseManipUtils::eigenmat_to_raw_xyzw( pose, i_opt_quat, i_opt_t );
-
-    // step-3: opt_quat.push_back( i_opt_quat ); opt_t.push_back( i_opt_t )
-    {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        opt_quat.push_back( i_opt_quat );
-        opt_t.push_back( i_opt_t );
-    }
-
-#endif
+#endif //__USE_YPR_REP
 }
 
 const int PoseGraphSLAM::n_opt_variables( ) const
 {
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    #if defined(___OPT_AS_DOUBLE_STAR)
     return _opt_len_;
-    #else
-    return opt_quat.size();
-    #endif
+
 }
+
+#ifdef __USE_YPR_REP
+double * PoseGraphSLAM::get_raw_ptr_to_opt_variable_ypr( int i ) const
+{
+    assert( i>=0 && i<n_opt_variables() );
+    return &_opt_ypr_[3*i];
+}
+
+#else
 
 double * PoseGraphSLAM::get_raw_ptr_to_opt_variable_q( int i ) const
 {
     assert( i>=0 && i<n_opt_variables() );
-#if defined(___OPT_AS_DOUBLE_STAR)
     return &_opt_quat_[4*i];
-#else
-    return opt_quat[i];
-#endif
+
 }
+#endif
+
 
 double * PoseGraphSLAM::get_raw_ptr_to_opt_variable_t( int i ) const
 {
     assert( i>=0 && i<n_opt_variables() );
-#if defined(___OPT_AS_DOUBLE_STAR)
     return &_opt_t_[3*i];
-#else
-    return opt_t[i];
-#endif
+
 }
 
 bool PoseGraphSLAM::update_opt_variable_with( int i, const Matrix4d& pose ) //< this will set opt_quad[i] and opt_t[i]. Will return false for invalid i
 {
+    #ifdef __USE_YPR_REP
+    double i_opt_ypr[5], i_opt_t[5];
+    PoseManipUtils::eigenmat_to_rawyprt( pose, (double*) i_opt_ypr,  (double*)i_opt_t );
+    if( i>=0 && i<n_opt_variables() )
+    {
+        std::lock_guard<std::mutex> lk(mutex_opt_vars);
+        _opt_ypr_[3*i+0] = i_opt_ypr[0];
+        _opt_ypr_[3*i+1] = i_opt_ypr[1];
+        _opt_ypr_[3*i+2] = i_opt_ypr[2];
 
-#if defined(___OPT_AS_DOUBLE_STAR)
+        _opt_t_[3*i+0] = i_opt_t[0];
+        _opt_t_[3*i+1] = i_opt_t[1];
+        _opt_t_[3*i+2] = i_opt_t[2];
+        return true;
+    }
+    return false;
+    #else
+
     double i_opt_quat[5], i_opt_t[5];
     PoseManipUtils::eigenmat_to_raw_xyzw( pose, (double*) i_opt_quat,  (double*)i_opt_t );
     if( i>=0 && i<n_opt_variables() )
@@ -201,49 +188,25 @@ bool PoseGraphSLAM::update_opt_variable_with( int i, const Matrix4d& pose ) //< 
     }
     return false;
 
-#else
-    double i_opt_quat[5], i_opt_t[5];
-    PoseManipUtils::eigenmat_to_raw_xyzw( pose, i_opt_quat, i_opt_t );
 
-    if( i>=0 && i<n_opt_variables() )
-    {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        for( int k=0 ; k<4 ; k++ )
-            (opt_quat[i])[k] = i_opt_quat[k];
-        for( int k=0 ; k<3 ; k++ )
-            (opt_t[i])[k] = i_opt_t[k];
-        return true;
-    } else {
-        return false;
-    }
-#endif
+    #endif //__USE_YPR_REP
 }
 
 
 
 const int PoseGraphSLAM::n_opt_switch() const {
-    #if defined(___OPT_AS_DOUBLE_STAR)
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
     return _opt_switch_len_;
-    #else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    return opt_switch.size();
-    #endif
+
 }
 
 double * PoseGraphSLAM::get_raw_ptr_to_opt_switch( int i ) const {
-    #if defined(___OPT_AS_DOUBLE_STAR)
     std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    // return &_opt_switch_[i];
     return (i>=0 && i<_opt_switch_len_)?&_opt_switch_[i]:NULL;
-    #else
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    return opt_switch[i];
-    #endif
+
 }
 
 void PoseGraphSLAM::allocate_and_append_new_edge_switch_var() {
-    #if defined(___OPT_AS_DOUBLE_STAR)
     double tmp[10];
     tmp[0] = 0.99;
     {
@@ -252,276 +215,30 @@ void PoseGraphSLAM::allocate_and_append_new_edge_switch_var() {
         _opt_switch_len_++;
 
     }
-    #else
-    double *tmp = new double[1];
-    tmp[0] = 0.99;
-    {
-        std::lock_guard<std::mutex> lk(mutex_opt_vars);
-        opt_switch.push_back( tmp );
-    }
-    #endif
+
 }
 
 
-//######## END Public Interfaces to retrive optimized poses ################
 
 
-// //TODO: removal of optimize6DOF(), the new_optimize6DOF works and superseeds this function
-// #define _DEBUG_LVL_optimize6DOF 1
-// void PoseGraphSLAM::optimize6DOF()
-// {
-//     cout << "#####################################\n";
-//     cout << TermColor::BLUE() << "### PoseGraphSLAM::optimize6DOF() ###" << TermColor::RESET() << endl;
-//     cout << "### \tinf_loop="<<inf_loop << "###\n"; //if this is set to true (default) will run a infinite loop to monitor the manager.
-//     cout << "#####################################\n";
-//
-//
-//
-//     int nodesize, old_nodesize; //even though this says size, it is actually indices. Consider renaming. TODO
-//     int edgesize, old_edgesize;
-//     old_nodesize = 0;//manager->getNodeLen();
-//     old_edgesize = 0;//manager->getEdgeLen();
-//
-//     ceres::Problem problem;
-//
-//     // Set Solver Options
-//     ceres::Solver::Options options;
-//     ceres::Solver::Summary summary;
-//     // options.linear_solver_type = ceres::SPARSE_SCHUR;
-//     options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-//
-//     options.minimizer_progress_to_stdout = false;
-//     options.max_num_iterations = 8;
-//
-//
-//     // ceres::LocalParameterization * quaternion_parameterization = new ceres::QuaternionParameterization;
-//     ceres::LocalParameterization * eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
-//     ceres::LossFunction * loss_function = new ceres::CauchyLoss(1.0);
-//
-//
-//     // There are 3 parts :
-//     // while( )
-//     //      step-1: Add optimization variables (if new nodes available with manager)
-//     //      step-2: Add Odometry Edges (if new available)
-//     //      step-3: Add Loop Edges (if new loops available)
-//
-//     while( ros::ok() )
-//     {
-//         nodesize = manager->getNodeLen();
-//         edgesize = manager->getEdgeLen();
-//         // if new nodes are available add odometry edges
-//             //continue;
-//         if( nodesize > old_nodesize ) //==> new nodes
-//         {
-//             cout << TermColor::BLUE() << "New nodes (#" << nodesize - old_nodesize << ")" << TermColor::RESET() << endl ;
-//
-//             ////////////////////////// Add optimization variables ///////////////////////
-//             cout << TermColor::BLUE() << "New Optimization Variables for nodes: " << old_nodesize << " to " << nodesize-1 << TermColor::RESET() << endl;
-//             for(int u=old_nodesize; u<nodesize ; u++ )
-//             {
-//                 // cout << ", u="<< u ;
-//                 // cout << "old_nodesize="<< old_nodesize << " u="<<u <<";\n";
-//                 double * __quat = new double[4];
-//                 double * __tran = new double[3];
-//
-//
-//                 // init optimization variables w_T_cam
-//                 // if( true )
-//                 if( old_nodesize == 0 )
-//                 {   // Original code: Set the initial guess as the VIO poses.
-//                     // This is note correct if solve() has changed some of the poses in the past. Best is to rely only on relative poses from VIO
-//                     Matrix4d w_M_u;
-//                     bool status0 = manager->getNodePose(u, w_M_u);
-//                     assert( status0 );
-//                     // PoseManipUtils::eigenmat_to_raw( w_M_u, __quat, __tran );
-//                     PoseManipUtils::eigenmat_to_raw_xyzw( w_M_u, __quat, __tran );
-//                 }
-//                 else
-//                 {
-//                     // M : uncorrected poses
-//                     // T : corrected poses
-//
-//                     // Note:
-//                     // Say in the previous run 0-248 are optimized and there are new nodes
-//                     // from 249 to 290 whose VIO exists but not yet taken into ceres.
-//                     // wTM_260 = w_T_248 * 248_M_260
-//                     //         = w_T_248 * 248_M_w * w_M_260
-//                     //         = w_T_248 * w_M_280.inv() * w_M_260
-//
-//                     // Getting the relative pose between current last corrected one
-//                     Matrix4d w_M_last;
-//                     bool status0 = manager->getNodePose( old_nodesize-1, w_M_last );
-//
-//                     Matrix4d w_M_u;
-//                     bool status1 = manager->getNodePose(u, w_M_u);
-//
-//                     assert( status0 && status1 );
-//                     Matrix4d last_M_u = w_M_last.inverse() * w_M_u;
-//
-//
-//                     // Getting pose of last corrected one (in world frame)
-//                     Matrix4d w_T_last;
-//                     // PoseManipUtils::raw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
-//                     PoseManipUtils::raw_xyzw_to_eigenmat( opt_quat[old_nodesize-1], opt_t[old_nodesize-1], w_T_last );
-//
-//                     Matrix4d w_TM_u = w_T_last * last_M_u;
-//
-//                     // PoseManipUtils::eigenmat_to_raw( w_TM_u, __quat, __tran );
-//                     PoseManipUtils::eigenmat_to_raw_xyzw( w_TM_u, __quat, __tran );
-//
-//                 }
-//
-//
-//                 {
-//                     std::lock_guard<std::mutex> lk(mutex_opt_vars);
-//                     opt_quat.push_back( __quat );
-//                     opt_t.push_back( __tran );
-//                 }
-//
-//
-//                 problem.AddParameterBlock( __quat, 4 );
-//                 // problem.SetParameterization( __quat,  quaternion_parameterization );
-//                 problem.SetParameterization( __quat,  eigenquaternion_parameterization );
-//                 problem.AddParameterBlock( __tran, 3 );
-//             }
-//
-//
-//             //////////////////// Error from Odometry Edges //////////////////////
-//             // Add residue blocks for odometry
-//             for( int u=old_nodesize; u<nodesize ; u++ )
-//             {
-//                 #if _DEBUG_LVL_optimize6DOF >= 2
-//                 cout << TermColor::RED() << "Odometry Edge: "  << TermColor::RESET();
-//                 #endif
-//                 for( int f=1 ; f<6 ; f++ )
-//                 {
-//                     if( u-f < 0 )
-//                         continue;
-//                     #if _DEBUG_LVL_optimize6DOF >= 2
-//                     cout << u << "<-->" << u-f << "    ";
-//                     #endif
-//
-//                     Matrix4d w_M_u, w_M_umf;
-//                     bool status0 = manager->getNodePose(u, w_M_u);
-//                     bool status1 = manager->getNodePose( u-f, w_M_umf );
-//                     assert( status0 && status1 );
-//
-//                     w_M_umf =  w_M_u.inverse() * w_M_umf ;
-//                     ceres::CostFunction * cost_function = SixDOFError::Create( w_M_umf);
-//                     problem.AddResidualBlock( cost_function, loss_function, opt_quat[u], opt_t[u],  opt_quat[u-f], opt_t[u-f] );
-//
-//                     // TODO: Get measure of how accurate was the local odometry. make it a co-variance matrix of size 6x6 and
-//                     //       and scale the residue block with the squareroot of the co-variance matrix.
-//                 }
-//                 #if _DEBUG_LVL_optimize6DOF >= 2
-//                 cout << endl;
-//                 #endif
-//
-//                 if( u==0 )
-//                 {
-//
-//                     problem.SetParameterBlockConstant(  opt_quat[0] );
-//                     problem.SetParameterBlockConstant(  opt_t[0]  );
-//                 }
-//
-//             }
-//         }
-//         else
-//         {
-//             #if _DEBUG_LVL_optimize6DOF >= 3
-//             cout << "No new nodes\n";
-//             #endif
-//         }
-//         old_nodesize = nodesize;
-//
-//
-//         ///////////////////// Error from Loop Closure Edges //////////////////////////////
-//
-//         // if new edges are available add loop edges
-//             //solve()
-//         if( edgesize > old_edgesize )
-//         {
-//             cout << TermColor::GREEN() << "New Loop Closure Edges (#" << edgesize - old_edgesize << ")\n" << TermColor::RESET();
-//
-//             for( int u=old_edgesize ; u<edgesize ; u++ )
-//             {
-//                 std::pair<int,int> p;
-//                 bool status0 = manager->getEdgeIdxInfo( u, p );
-//                 Matrix4d pTc;
-//                 bool status1 = manager->getEdgePose( u, pTc );
-//                 double closure_loop_weight = manager->getEdgeWeight(u);
-//                 assert( closure_loop_weight >= 0. && "Loop closure weight need to be non-negative");
-//                 // TODO: Get edge weight, make it a co-variance matrix of sixe 6x6 and
-//                 //       and scale the residue block with the squareroot of the co-variance matrix.
-//
-//                 assert( status0 && status1 );
-//                 assert( p.first >=0  && p.second >=0 );
-//                 assert( p.first < opt_quat.size() );
-//                 assert(  p.second < opt_quat.size() );
-//
-//                 cout << TermColor::GREEN() << "Add Loop Closure "<< u << " : " << p.first << "<-->" << p.second << " | ";
-//                 string _tmp;
-//                 PoseManipUtils::prettyprintPoseMatrix( pTc, _tmp );
-//                 cout << _tmp <<  TermColor::RESET() << endl;
-//
-//                 ceres::CostFunction * cost_function = SixDOFError::Create( pTc, closure_loop_weight );
-//                 problem.AddResidualBlock( cost_function, loss_function, opt_quat[p.first], opt_t[p.first],
-//                                                                 opt_quat[p.second], opt_t[p.second]  );
-//             }
-//
-//             cout << "solve()\n";
-//             ceres::Solve( options, &problem, &summary );
-//             solved_until = nodesize;
-//             // cout << summary.FullReport() << endl;
-//             cout << summary.BriefReport() << endl;
-//             cout << "Solve() took " << summary.total_time_in_seconds << " sec"<< endl;
-//             cout << "Poses are Optimized from 0 to "<< old_nodesize << endl;
-//             cout << "New nodes in manager which are not yet taken here from idx "<< old_nodesize << " to "<< manager->getNodeLen() << endl;
-//         }
-//         else
-//         {
-//             #if _DEBUG_LVL_optimize6DOF >= 3
-//             cout << "No new loop closure edges\n";
-//             #endif
-//         }
-//         old_edgesize = edgesize;
-//
-//         if( inf_loop == false )
-//             return;
-//
-//         std::this_thread::sleep_for( std::chrono::milliseconds(1000) );
-//     }
-// }
 
 
 void PoseGraphSLAM::deallocate_optimization_variables()
 {
-    #if defined(___OPT_AS_DOUBLE_STAR)
+    std::lock_guard<std::mutex> lk(mutex_opt_vars);
     _opt_len_ = 0;
-    delete [] _opt_quat_;
+    #ifdef __USE_YPR_REP
+    delete [] _opt_ypr_;
     delete [] _opt_t_;
     #else
-
-    std::lock_guard<std::mutex> lk(mutex_opt_vars);
-    assert( opt_quat.size() == opt_t.size() );
-
-    for( int i=0 ; i<opt_t.size() ; i++ )
-    {
-        delete [] opt_quat[i];
-        delete [] opt_t[i];
-    }
-    opt_quat.clear();
-    opt_t.clear();
-
-    for( int i=0 ; i<opt_switch.size() ; i++ )
-        delete [] opt_switch[i];
-
+    delete [] _opt_quat_;
+    delete [] _opt_t_;
     #endif
-
 
 }
 
 
+//######## END Public Interfaces to retrive optimized poses ################
 
 
 
@@ -537,6 +254,7 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
     options.max_num_iterations = 8;
 
 
+    qin_angle_local_paramterization = AngleLocalParameterization::Create();
     eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
     // robust_norm = new ceres::CauchyLoss(1.0);
     robust_norm = new ceres::HuberLoss(0.1);
@@ -544,7 +262,7 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
 }
 
 
-
+#ifdef __new_optimize6DOF__
 // #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) msg;
 #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) ;
 
@@ -1097,6 +815,8 @@ void PoseGraphSLAM::new_optimize6DOF()
 
 }
 
+#endif //__new_optimize6DOF__
+
 
 void PoseGraphSLAM::push_back_odomedge_residue_info( std::tuple<int,int,float,string> m )
 {
@@ -1349,6 +1069,9 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 //---  This is the newer (Feb22 2019) implementation of `new_optimize6DOF`.---
 //---  It is an infinite loop and triggers the solve when there are new    ---
 //---  loop edges in the manager.                                          ---
+//---       A lot of corner cases correctly handled (verified) in respect  ---
+//---       to live merging trajectories and kidnap. Better to use this    ---
+//---       rather than new_optimize6DOF().
 //----------------------------------------------------------------------------
 // #define __reint_allocation_cout(msg)  msg;
 #define __reint_allocation_cout(msg)  ;
@@ -1407,6 +1130,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     reint_options.max_num_iterations = 10;
     // reint_options.enable_fast_removal = true;
     eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
+    qin_angle_local_paramterization = AngleLocalParameterization::Create();
+
     // robust_norm = new ceres::CauchyLoss(1.0);
     robust_norm = new ceres::HuberLoss(0.1);
 
@@ -1474,9 +1199,15 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             __new_node_allocations++;
 
             // [IMPORTANT] : remeber to specify (to ceres) the parameter blocks and their parameterization.
+            #ifdef __USE_YPR_REP
+            reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_ypr(yp), 1 );
+            reint_problem.SetParameterization( get_raw_ptr_to_opt_variable_ypr(yp),  qin_angle_local_paramterization );
+            reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(yp), 3 );
+            #else
             reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_q(yp), 4 );
             reint_problem.SetParameterization( get_raw_ptr_to_opt_variable_q(yp),  eigenquaternion_parameterization );
             reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(yp), 3 );
+            #endif //__USE_YPR_REP
         }
 
         int __new_opt_switch_allocations = 0;
@@ -1511,6 +1242,17 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             int _b = paur.second; //previous  eg. 165
             int __a_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.first ) );
             int __b_world_is = manager->which_world_is_this( manager->getNodeTimestamp( paur.second ) );
+            #ifdef __USE_YPR_REP
+            Matrix4d __w_T_first  = manager->getNodePose( paur.first );
+            double __w_T_first___ypr[5], __w_T_first___t[5];
+            PoseManipUtils::eigenmat_to_rawyprt(  __w_T_first, __w_T_first___ypr, __w_T_first___t );
+
+
+            Matrix4d __w_T_second = manager->getNodePose( paur.second );
+            double __w_T_second___ypr[5], __w_T_second___t[5];
+            PoseManipUtils::eigenmat_to_rawyprt(  __w_T_first, __w_T_second___ypr, __w_T_second___t );
+
+            #endif
             if( __a_world_is < 0 || __b_world_is < 0 )
                 continue; // skip if the edge's 1 node lies in dead-zone
             int __setid_of_world_A = manager->getWorldsPtr()->find_setID_of_world_i( __a_world_is );
@@ -1645,13 +1387,30 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             }
 
             // simply add edge residue
-            ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
-            // ceres::CostFunction * cost_function = FourDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            #ifdef __USE_YPR_REP
+
+
+            double __bTa___ypr[5], __bTa___t[5];
+            PoseManipUtils::eigenmat_to_rawyprt(  bTa, __bTa___ypr, __bTa___t );
+
+            ceres::CostFunction * cost_function =
+                QinFourDOFWeightError::Create( bTa(0,3),bTa(1,3),bTa(2,3),
+                __bTa___ypr[0], __w_T_first___ypr[1],__w_T_first___ypr[2]
+                );
+
+                reint_problem.AddResidualBlock( cost_function, NULL,
+                    get_raw_ptr_to_opt_variable_ypr(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
+                    get_raw_ptr_to_opt_variable_ypr(paur.first), get_raw_ptr_to_opt_variable_t(paur.first)
+                );
+            #else
+            // ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            ceres::CostFunction * cost_function = FourDOFErrorWithSwitchingConstraints::Create( bTa, weight );
             reint_problem.AddResidualBlock( cost_function, NULL,
                 get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
                 get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first),
                 get_raw_ptr_to_opt_switch(e)
             );
+            #endif //__USE_YPR_REP
 
         }
         ___trigger_header( cout << "[ETA loopedge_len] ms=" << eta.toc_milli() << " loopedge_len="<< loopedge_len << endl; )
@@ -1702,12 +1461,33 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                 Vector3d __ypr = PoseManipUtils::R2ypr( u_M_umf.topLeftCorner<3,3>() );
                 odom_edge_weight *= exp( -__ypr(0)*__ypr(0)/6. );
 
+                #ifdef __USE_YPR_REP
+                double w_M_u___ypr[5], w_M_u___t[5];
+                PoseManipUtils::eigenmat_to_rawyprt( w_M_u,w_M_u___ypr, w_M_u___t );
+
+                double w_M_umf___ypr[5], w_M_umf___t[5];
+                PoseManipUtils::eigenmat_to_rawyprt( w_M_umf,w_M_umf___ypr, w_M_umf___t );
+
+                double u_M_umf___ypr[5], u_M_umf___t[5];
+                PoseManipUtils::eigenmat_to_rawyprt( u_M_umf,u_M_umf___ypr, u_M_umf___t );
+
+                ceres::CostFunction * cost_function = QinFourDOFWeightError::Create(
+                    u_M_umf(0,3),u_M_umf(1,3),u_M_umf(2,3),
+                    u_M_umf___ypr[0], w_M_u___ypr[1], w_M_u___ypr[2]
+                    //,odom_edge_weight
+                    );
+
+                    reint_problem.AddResidualBlock( cost_function, NULL,
+                        get_raw_ptr_to_opt_variable_ypr(u), get_raw_ptr_to_opt_variable_t(u),
+                        get_raw_ptr_to_opt_variable_ypr(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
+                #else
                 // cost
-                ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
-                // ceres::CostFunction * cost_function = FourDOFError::Create( u_M_umf, odom_edge_weight  );
+                // ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
+                ceres::CostFunction * cost_function = FourDOFError::Create( u_M_umf, odom_edge_weight  );
                 reint_problem.AddResidualBlock( cost_function, NULL,
                     get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
                     get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
+                #endif //__USE_YPR_REP
 
 
             }
@@ -1873,7 +1653,7 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
         //-----------------------------
         //  -5- Mark nodes as constant. Possibly also need to mark starts of each worlds as constants. Can also try setting each sets 1st node as constant.
         //------------------------------
-        #if 1
+        #if 1 //set this to 1 to add Node Regularization terms
         eta.tic();
         for( int v=0 ; v<regularization_terms_list.size() ; v++ ) {
             reint_problem.RemoveResidualBlock( regularization_terms_list[v] );
