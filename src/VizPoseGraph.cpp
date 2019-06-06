@@ -65,7 +65,8 @@ void VizPoseGraph::publishLastNNodes( int n )
 
 
 void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
-    const string& ns, float r, float g, float b, float linewidth_multiplier ) const
+    const string& ns, float r, float g, float b, float linewidth_multiplier,
+    float offset_x, float offset_y, float offset_z ) const
 {
     // this is a cost effective way to visualize camera path
     visualization_msgs::Marker marker;
@@ -84,9 +85,9 @@ void VizPoseGraph::publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci,
     for( int i=0 ; i<w_T_ci.size() ; i++ )
     {
         geometry_msgs::Point pt;
-        pt.x = (w_T_ci[i])(0,3);
-        pt.y = (w_T_ci[i])(1,3);
-        pt.z = (w_T_ci[i])(2,3);
+        pt.x = (w_T_ci[i])(0,3) + offset_x;
+        pt.y = (w_T_ci[i])(1,3) + offset_y;
+        pt.z = (w_T_ci[i])(2,3) + offset_z;
 
         marker.points.push_back( pt );
         marker.colors.push_back( C1 );
@@ -445,34 +446,39 @@ void VizPoseGraph::publishSlamResidueVisual( int n ) const
 
 
 
-void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b, float linewidth_multiplier, float camera_size_multiplier )
+void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b,
+    float linewidth_multiplier, float camera_size_multiplier,
+    float offset_x, float offset_y, float offset_z )
 {
     visualization_msgs::Marker marker2 ;
     RosMarkerUtils::init_camera_marker( marker2, camera_size_multiplier );
     RosMarkerUtils::setpose_to_marker( wTc, marker2 );
     RosMarkerUtils::setcolor_to_marker( r,g,b, marker2 );
+    marker2.pose.position.x +=  offset_x;
+    marker2.pose.position.y +=  offset_y;
+    marker2.pose.position.z +=  offset_z;
     marker2.scale.x = 0.08*linewidth_multiplier;
     marker2.id = 0;
     marker2.ns = ns+string("_cam_visual");
     pub_pgraph.publish( marker2 );
 }
 
-void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id )
+void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale )
 {
     visualization_msgs::Marker axis;
     RosMarkerUtils::init_line_marker( axis );
-    axis.id = 0;
+    axis.id = id;
     axis.ns = ns.c_str();
     axis.scale.x = 0.2;
 
-
+    float f = scale;
     // Add pts
     RosMarkerUtils::add_point_to_marker( 0,0,0, axis, true );
-    RosMarkerUtils::add_point_to_marker( 1,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( f,0,0, axis, false );
     RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
-    RosMarkerUtils::add_point_to_marker( 0,1,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,f,0, axis, false );
     RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
-    RosMarkerUtils::add_point_to_marker( 0,0,1, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,f, axis, false );
 
     // Add colors to each pt
     RosMarkerUtils::add_colors_to_marker( 1.0,0,0, axis, true );

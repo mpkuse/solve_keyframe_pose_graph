@@ -396,6 +396,10 @@ struct opt_traj_publisher_options
 
     // The thickness of the lines
     float linewidth_multiplier=1.0;
+
+
+    // Udumbe offset_y. When multiple co-ordinates exist, the offset for plotting on rviz. keep it 30.0
+    float udumbe_offset_y = 30.0;
 };
 
 // comment the following #define to remove the code which checks file's exisitance before printing.
@@ -1017,9 +1021,45 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         }
 
+        //-----------------------------------------------------------------------------------------------//
+        //------------------------- After this only uses jmb and lmb to publish -------------------------//
+        //-----------------------------------------------------------------------------------------------//
 
         //---
-        //--- Publish jmb
+        //--- Decide offset's (for plotting) different co-ordinate systems
+        //---
+        #if 1
+        map< int, int > setids_to_udumbes;
+        if( jmb.size() > 0 )
+        {
+            int h=0;
+            for( auto it=jmb.begin() ; it!=jmb.end() ; it++ ) {
+                int setid = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first );
+                if( setid < 0 ) //ignore negative setids
+                    continue;
+                if( setids_to_udumbes.count(setid) == 0 ) {
+                    setids_to_udumbes[ setid ] = h;
+                    h++;
+                }
+            }
+
+            #if 0
+            cout << TermColor::MAGENTA() << "---\n";
+            for( auto it=setids_to_udumbes.begin() ; it!=setids_to_udumbes.end() ; it++ ) {
+                cout << "setid=" << it->first << "\tudumbe=" << it->second << endl;
+            }
+            cout << TermColor::RESET();
+            #endif
+
+        }
+        #endif
+
+
+
+
+        //---
+        //--- Publish jmb.
+        //          Note: jmb's keys are `worldIDs` and jmb's values are `vector<Matrix4d>& w_T_ci`
         //---
         if( jmb.size() == 0 )
         {
@@ -1037,6 +1077,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
                 float c_r=0., c_g=0., c_b=0.;
                 int rng=-1;
+
                 if( options.line_color_style == 10 )
                     rng = it->first; //color by world id WorldID
                 else if( options.line_color_style == 12 )
@@ -1060,7 +1101,21 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     c_b = color[0]/255.;
                 }
 
-                viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b, options.linewidth_multiplier );
+                int curr_set_id = manager->getWorldsConstPtr()->find_setID_of_world_i( it->first );
+                float offset_x=0., offset_y=0., offset_z=0.;
+                if( curr_set_id >= 0 ) {
+                    if ( setids_to_udumbes.count(curr_set_id) > 0 ) {
+                        // cout << "rng=" << rng << "setids_to_udumbes"<<  setids_to_udumbes.at( rng ) << endl;
+                        offset_y = setids_to_udumbes.at( curr_set_id )*options.udumbe_offset_y;
+                    }
+                } else {
+                    curr_set_id = manager->getWorldsConstPtr()->find_setID_of_world_i( -it->first-1);
+                    if ( setids_to_udumbes.count(curr_set_id) > 0 ) {
+                        offset_y = setids_to_udumbes.at( curr_set_id )*options.udumbe_offset_y;
+                    }
+                }
+
+                viz->publishNodesAsLineStrip( it->second, ns.c_str(), c_r, c_g, c_b, options.linewidth_multiplier, offset_x, offset_y, offset_z );
             }
             // #endif
 
@@ -1091,7 +1146,25 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 c_g = color[1]/255.;
                 c_b = color[0]/255.;
             }
-            viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b, options.linewidth_multiplier, 20 );
+
+
+            int curr_set_id = manager->getWorldsConstPtr()->find_setID_of_world_i( latest_pose_worldid );
+            float offset_x=0., offset_y=0., offset_z=0.;
+            if( curr_set_id >= 0 ) {
+                if ( setids_to_udumbes.count(curr_set_id) > 0 ) {
+                    // cout << "rng=" << rng << "setids_to_udumbes"<<  setids_to_udumbes.at( rng ) << endl;
+                    offset_y = setids_to_udumbes.at( curr_set_id )*options.udumbe_offset_y;
+                }
+            } else {
+                curr_set_id = manager->getWorldsConstPtr()->find_setID_of_world_i( -latest_pose_worldid-1 );
+                if ( setids_to_udumbes.count(curr_set_id) > 0 ) {
+                    offset_y = setids_to_udumbes.at( curr_set_id )*options.udumbe_offset_y;
+                }
+            }
+
+            viz->publishCameraVisualMarker( wi_T_latest, "world##", c_r, c_g, c_b,
+                    options.linewidth_multiplier, 20,
+                    offset_x, offset_y, offset_z );
 
 
             // Publish loop edges
@@ -1107,8 +1180,27 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                 auto pair = manager->getEdgeIdxInfo( it );
                 int __a = pair.first;
                 int __b = pair.second;
-                Vector3d ____apose = lbm[__a];
-                Vector3d ____bpose = lbm[__b];
+
+                int __a_worldid = manager->which_world_is_this( manager->getNodeTimestamp(__a) );
+                int __a_setid = manager->getWorldsConstPtr()->find_setID_of_world_i( __a_worldid );
+                int __b_worldid = manager->which_world_is_this( manager->getNodeTimestamp(__b) );
+                int __b_setid = manager->getWorldsConstPtr()->find_setID_of_world_i( __b_worldid );
+                #if 0
+                cout << TermColor::CYAN() ;
+                cout << "it=" << it;
+                cout << "__a=" << __a << " __a_worldid=" << __a_worldid << " __a_setid=" << __a_setid << "\t|";
+                cout << "__b=" << __b << " __b_worldid=" << __b_worldid << " __b_setid=" << __b_setid << "\n";
+                cout << TermColor::RESET();
+                #endif
+
+                int __a_udumbe = 0, __b_udumbe=0;
+                if( setids_to_udumbes.count(__a_setid) > 0 )
+                    __a_udumbe = setids_to_udumbes.at( __a_setid );
+                if( setids_to_udumbes.count(__b_setid) > 0 )
+                    int __b_udumbe = setids_to_udumbes.at( __b_setid  );
+
+                Vector3d ____apose = lbm[__a] + Vector3d( 0., options.udumbe_offset_y*__a_udumbe , 0.0  );
+                Vector3d ____bpose = lbm[__b] + Vector3d( 0., options.udumbe_offset_y*__a_udumbe , 0.0  );
 
                 RosMarkerUtils::add_point_to_marker(  ____apose, linelist_marker, false );
                 RosMarkerUtils::add_point_to_marker(  ____bpose, linelist_marker, false );
@@ -1116,10 +1208,25 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
             viz->publishThisVisualMarker( linelist_marker );
 
 
+            // if( published_axis || rand() % 100 == 0 ) {
             if( published_axis || rand() % 100 == 0 ) {
-                Matrix4d _axis_pose = Matrix4d::Identity();
                 // odm_axis_pose(0,3) += offset_x; odm_axis_pose(1,3) += offset_y; odm_axis_pose(2,3) += offset_z;
-                viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0  );
+                // viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0  );
+
+                for( int p=0 ; p<setids_to_udumbes.size() ; p++ ) {
+                    Matrix4d _axis_pose = Matrix4d::Identity();
+                    _axis_pose(0,3) += 0.0; _axis_pose(1,3) += p*options.udumbe_offset_y; _axis_pose(2,3) += 0.0;
+                    viz->publishXYZAxis( _axis_pose, "opt_traj_axis", p, 2.0  );
+                }
+
+                if( rand() %1000 == 0 ) {
+                    // once in a while flush the unused co-ordinates
+                    Matrix4d _axis_pose = Matrix4d::Identity();
+                    for( int p=setids_to_udumbes.size() ; p<20;  p++ ) {
+                        viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0, 0.0  );
+                    }
+                }
+
                 published_axis = false;
             }
 
@@ -1355,7 +1462,8 @@ int main( int argc, char ** argv)
     // 10 //< color the line with worldID
     // 12 //< color the line with setID( worldID )
     options.line_color_style = 10;
-    options.linewidth_multiplier = 0.25;
+    options.linewidth_multiplier = 3; //0.25; //8
+    options.udumbe_offset_y = 30.0;
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 
@@ -1384,7 +1492,7 @@ int main( int argc, char ** argv)
 
 
 
-    #define __LOGGING__ 1 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
+    #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__
     // Note: If using roslaunch to launch this node and when LOGGING is enabled,
     // roslaunch sends a sigterm and kills this thread when ros::ok() returns false ie.

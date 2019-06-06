@@ -46,7 +46,10 @@ public:
     void setOdometryPublisher( const ros::Publisher& pub );
 
     // void publishLastNNodes( int n ); //< Removal
-    void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns, float r, float g, float b, float linewidth_multiplier=1.0 ) const;
+    void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns,
+        float r, float g, float b,
+        float linewidth_multiplier=1.0,
+        float offset_x=0., float offset_y=0., float offset_z=0. ) const;
     void publishNodesAsLineStrip( const vector<Matrix4d>& w_T_ci, const string& ns,
         float r, float g, float b,
         int idx_partition,
@@ -60,9 +63,11 @@ public:
     void publishLastNEdges( int n ) const;
 
     void publishSlamResidueVisual( int n ) const;
-    void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b, float linewidth_multiplier=1.0, float camera_size_multiplier=10. );
+    void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b,
+        float linewidth_multiplier=1.0, float camera_size_multiplier=10.,
+        float offset_x=0.0, float offset_y=0.0, float offset_z=0.0  );
 
-    void publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id );
+    void publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale=1.0 );
     void publishThisVisualMarker( const visualization_msgs::Marker& the_marker );
     void publishImage( const cv::Mat& im );
 
