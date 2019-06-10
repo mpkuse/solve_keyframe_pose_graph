@@ -1223,7 +1223,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
                     // once in a while flush the unused co-ordinates
                     Matrix4d _axis_pose = Matrix4d::Identity();
                     for( int p=setids_to_udumbes.size() ; p<20;  p++ ) {
-                        viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0, 0.0  );
+                        viz->publishXYZAxis( _axis_pose, "opt_traj_axis", p, 0.0  );
                     }
                 }
 
