@@ -1103,8 +1103,8 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 
 // This thread wakes up when there are new loopedges. This flag controls the printing on trigger.
 // When debugging you want to keep the headers 'on'.
-// #define ___trigger_header( msg ) msg;
-#define ___trigger_header( msg ) ;
+#define ___trigger_header( msg ) msg;
+// #define ___trigger_header( msg ) ;
 
 void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
 {

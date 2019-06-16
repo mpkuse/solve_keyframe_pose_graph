@@ -18,6 +18,8 @@ worlds_handle_raw_ptr = new Worlds();
 
 }
 
+// #define __NODEDATAMANAGER_CALLBACKS( msg ) msg;
+#define __NODEDATAMANAGER_CALLBACKS(msg) ;
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
     // ROS_INFO( "NodeDataManager::camera_pose_callback");
@@ -40,7 +42,9 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
     w_T_cam(1,3) = msg->pose.pose.position.y;
     w_T_cam(2,3) = msg->pose.pose.position.z;
     w_T_cam(3,3) = 1.0;
-    // cout << "camera_pose_callback: " << node_pose.size() << " " << PoseManipUtils::prettyprintMatrix4d( w_T_cam ) << endl;
+    __NODEDATAMANAGER_CALLBACKS(
+    cout << "camera_pose_callback: node_pose.size()=" << node_pose.size() << " curr_pose=" << PoseManipUtils::prettyprintMatrix4d( w_T_cam ) << endl;
+    )
 
 
     // co-variance
@@ -121,8 +125,11 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 //
 //
 // }
-
+#ifdef __USE_SELF_LOOPEDGE_MSG
+void NodeDataManager::loopclosure_pose_callback( const solve_keyframe_pose_graph::LoopEdge::ConstPtr& msg  )
+#else
 void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::ConstPtr& msg  )
+#endif
 {
     // Add a new edge ( 2 node*)
 
@@ -134,11 +141,11 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
     // assert( op_mode == 30 );
     string description = msg->description;
 
-    #if 0
+    __NODEDATAMANAGER_CALLBACKS(
     cout <<  TermColor::iYELLOW() << "[NodeDataManager::loopclosure_pose_callback]";
     cout << "t_a=" << t_a << "   t_b=" << t_b << "   wt=" << msg->weight;
     cout << "  description=" << msg->description << TermColor::RESET() << endl;
-    #endif
+    )
 
 
     // retrive rel-pose  p_T_c

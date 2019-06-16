@@ -1022,7 +1022,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         }
 
-        cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Took " << _time_jmb.toc_milli() << "ms to compute #nodes=" << manager->getNodeLen() << TermColor::RESET() << endl;
+        // cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Took " << _time_jmb.toc_milli() << "ms to compute #nodes=" << manager->getNodeLen() << TermColor::RESET() << endl;
         //-----------------------------------------------------------------------------------------------//
         //------------------------- After this only uses jmb and lmb to publish -------------------------//
         //-----------------------------------------------------------------------------------------------//
@@ -1236,7 +1236,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         }
 
-        cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Publish took " << _time_publih.toc_milli() << " ms" << endl;
+        // cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Publish took " << _time_publih.toc_milli() << " ms" << endl;
         // book keeping
         // cerr << "\nSLEEP\n";
         loop_rate.sleep();
@@ -1447,6 +1447,7 @@ int main( int argc, char ** argv)
     // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
     slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
     std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
@@ -1468,7 +1469,7 @@ int main( int argc, char ** argv)
     options.line_color_style = 10;
     options.linewidth_multiplier = 3; //0.25; //8
     options.udumbe_offset_y = 30.0;
-    std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
+    // std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 
 
@@ -1490,7 +1491,7 @@ int main( int argc, char ** argv)
     // th3.join();
     // th4.join();
     th5.join();
-    th6.join();
+    // th6.join();
 
     th_slam.join();
 
