@@ -838,7 +838,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
 
 
-    ros::Rate loop_rate(20);
+    ros::Rate loop_rate(10);
     // ros::Rate loop_rate(5);
     map<int, vector<Matrix4d> > jmb;
     vector< Vector3d > lbm; // a corrected poses. Same index as the node. These are used for loopedges.
@@ -881,7 +881,8 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         }
         #endif
 
-
+        ElapsedTime _time_jmb;
+        _time_jmb.tic();
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
@@ -1021,6 +1022,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         }
 
+        // cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Took " << _time_jmb.toc_milli() << "ms to compute #nodes=" << manager->getNodeLen() << TermColor::RESET() << endl;
         //-----------------------------------------------------------------------------------------------//
         //------------------------- After this only uses jmb and lmb to publish -------------------------//
         //-----------------------------------------------------------------------------------------------//
@@ -1028,6 +1030,8 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
         //---
         //--- Decide offset's (for plotting) different co-ordinate systems
         //---
+        ElapsedTime _time_publih;
+        _time_publih.tic();
         #if 1
         map< int, int > setids_to_udumbes;
         if( jmb.size() > 0 )
@@ -1232,7 +1236,7 @@ void opt_traj_publisher_colored_by_world( const NodeDataManager * manager, const
 
         }
 
-
+        // cout << TermColor::BLUE() << "[opt_traj_publisher_colored_by_world] Publish took " << _time_publih.toc_milli() << " ms" << endl;
         // book keeping
         // cerr << "\nSLEEP\n";
         loop_rate.sleep();
@@ -1443,6 +1447,7 @@ int main( int argc, char ** argv)
     // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
     slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
     std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
@@ -1455,7 +1460,7 @@ int main( int argc, char ** argv)
 
     // setup manager publishers threads - adhoc
     // std::thread th3( periodic_publish_optimized_poses_smart, manager, slam, viz );
-    std::thread th4( periodic_publish_odoms, manager, viz );
+    // std::thread th4( periodic_publish_odoms, manager, viz );
     std::thread th5( monitor_disjoint_set_datastructure, manager, viz );
 
     opt_traj_publisher_options options;
@@ -1484,7 +1489,7 @@ int main( int argc, char ** argv)
     // th1.join();
     // th2.join();
     // th3.join();
-    th4.join();
+    // th4.join();
     th5.join();
     th6.join();
 
