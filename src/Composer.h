@@ -4,6 +4,7 @@
 
 
 #include <iostream>
+#include <random>
 
 #include "NodeDataManager.h"
 #include "PoseGraphSLAM.h"
@@ -69,7 +70,7 @@ public:
     void pose_assember_disable() {b_pose_assember = false; }
 
     // Returns the last element in `global_lmb` along with the timestamp
-    // Returns -1 when len(global_lmb) is zero, else return the posegraph node index of it. 
+    // Returns -1 when len(global_lmb) is zero, else return the posegraph node index of it.
     int get_last_known_camerapose( Matrix4d& w_T_lastcam, ros::Time& stamp_of_it );
 
 private:
