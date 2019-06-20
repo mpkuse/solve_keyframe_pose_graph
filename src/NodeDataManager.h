@@ -167,7 +167,7 @@ public:
     const Worlds * getWorldsConstPtr() const { return (const Worlds*) worlds_handle_raw_ptr; }
     // int worlds__n_worlds() const { return worlds_handle.n_worlds(); }
 
-    void print_worlds_info( int verbosity );
+    void print_worlds_info( int verbosity ) const;
 
 private:
     mutable std::mutex mutex_kidnap;

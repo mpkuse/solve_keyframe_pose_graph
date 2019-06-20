@@ -70,6 +70,7 @@ add_executable( keyframe_pose_graph_slam
         src/utils/RosMarkerUtils.cpp
         src/utils/RawFileIO.cpp
         src/Worlds.cpp
+        src/Composer.cpp
         )
 
 

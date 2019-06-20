@@ -998,7 +998,7 @@ int NodeDataManager::n_worlds() const
 
 
 
-void NodeDataManager::print_worlds_info( int verbosity )
+void NodeDataManager::print_worlds_info( int verbosity ) const 
 {
 
     bool start_ends_u_of_worlds=false, rel_pose_between_worlds=false, kidnap_info=false, which_world_each_node_belong_to=false ;

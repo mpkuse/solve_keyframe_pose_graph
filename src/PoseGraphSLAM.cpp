@@ -1403,8 +1403,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                     get_raw_ptr_to_opt_variable_ypr(paur.first), get_raw_ptr_to_opt_variable_t(paur.first)
                 );
             #else
-            // ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
-            ceres::CostFunction * cost_function = FourDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            ceres::CostFunction * cost_function = SixDOFErrorWithSwitchingConstraints::Create( bTa, weight );
+            // ceres::CostFunction * cost_function = FourDOFErrorWithSwitchingConstraints::Create( bTa, weight );
             reint_problem.AddResidualBlock( cost_function, NULL,
                 get_raw_ptr_to_opt_variable_q(paur.second), get_raw_ptr_to_opt_variable_t(paur.second),
                 get_raw_ptr_to_opt_variable_q(paur.first), get_raw_ptr_to_opt_variable_t(paur.first),
@@ -1482,8 +1482,8 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
                         get_raw_ptr_to_opt_variable_ypr(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
                 #else
                 // cost
-                // ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
-                ceres::CostFunction * cost_function = FourDOFError::Create( u_M_umf, odom_edge_weight  );
+                ceres::CostFunction * cost_function = SixDOFError::Create( u_M_umf, odom_edge_weight  );
+                // ceres::CostFunction * cost_function = FourDOFError::Create( u_M_umf, odom_edge_weight  );
                 reint_problem.AddResidualBlock( cost_function, NULL,
                     get_raw_ptr_to_opt_variable_q(u), get_raw_ptr_to_opt_variable_t(u),
                     get_raw_ptr_to_opt_variable_q(u-f), get_raw_ptr_to_opt_variable_t(u-f) );
