@@ -193,5 +193,17 @@ private:
     Worlds * worlds_handle_raw_ptr=NULL;
 
 
+    //////// cam imu extrinsic (this is published by vins estimator node)
+public:
+    void extrinsic_cam_imu_callback( const nav_msgs::Odometry::ConstPtr msg );
+    Matrix4d get_imu_T_cam() const;
+    void get_imu_T_cam( Matrix4d& res, ros::Time& _t ) const;
+    bool is_imu_T_cam_available() const;
+
+private:
+    mutable mutex imu_cam_mx;
+    bool imu_T_cam_available = false;
+    Matrix4d imu_T_cam;
+    ros::Time imu_T_cam_stamp;
 
 };

@@ -18,8 +18,8 @@ worlds_handle_raw_ptr = new Worlds();
 
 }
 
-#define __NODEDATAMANAGER_CALLBACKS( msg ) msg;
-// #define __NODEDATAMANAGER_CALLBACKS(msg) ;
+// #define __NODEDATAMANAGER_CALLBACKS( msg ) msg;
+#define __NODEDATAMANAGER_CALLBACKS(msg) ;
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
     // ROS_INFO( "NodeDataManager::camera_pose_callback");
@@ -43,7 +43,7 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
     w_T_cam(2,3) = msg->pose.pose.position.z;
     w_T_cam(3,3) = 1.0;
     __NODEDATAMANAGER_CALLBACKS(
-    cout << "camera_pose_callback: node_pose.size()=" << node_pose.size() << " curr_pose=" << PoseManipUtils::prettyprintMatrix4d( w_T_cam ) << endl;
+    cout << "[NodeDataManager::camera_pose_callback] t=" <<  msg->header.stamp << ": node_pose.size()=" << node_pose.size() << " curr_pose=" << PoseManipUtils::prettyprintMatrix4d( w_T_cam ) << endl;
     )
 
 
@@ -75,56 +75,6 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
 }
 
 
-// void NodeDataManager::loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  )
-// {
-//     // ROS_INFO( "NodeDataManager::loopclosure_pose_callback");
-//     // Add a new edge ( 2 node*)
-//
-//
-//     ros::Time t_c = msg->c_timestamp;
-//     ros::Time t_p = msg->prev_timestamp;
-//     int op_mode = msg->op_mode;
-//     double goodness = (double)msg->goodness;
-//     assert( op_mode == 30 );
-//
-//     // retrive rel-pose  p_T_c
-//     Matrix4d p_T_c = Matrix4d::Zero();
-//     Quaterniond quat( msg->p_T_c.orientation.w, msg->p_T_c.orientation.x, msg->p_T_c.orientation.y, msg->p_T_c.orientation.z );
-//     p_T_c.topLeftCorner<3,3>() = quat.toRotationMatrix();
-//     p_T_c(0,3) = msg->p_T_c.position.x;
-//     p_T_c(1,3) = msg->p_T_c.position.y;
-//     p_T_c(2,3) = msg->p_T_c.position.z;
-//     p_T_c(3,3) = 1.0;
-//
-//
-//     // Lock
-//     node_mutex.lock() ;
-//
-//     // loop up t_c in node_timestamps[]
-//     int index_t_c = find_indexof_node(node_timestamps, t_c );
-//
-//     // loop up t_p in node_timestamps
-//     int index_t_p = find_indexof_node(node_timestamps, t_p );
-//
-//     // Unlock
-//     node_mutex.unlock();
-//
-//     cout << "[NodeDataManager] Rcvd NapMsg " << index_t_c << "<--->" << index_t_p << endl;
-//     assert( t_c > t_p );
-//
-//     std::pair<int,int> closure_edge;
-//     closure_edge.first = index_t_p;
-//     closure_edge.second = index_t_c;
-//
-//     edge_mutex.lock();
-//     loopclosure_edges.push_back( closure_edge );
-//     loopclosure_edges_goodness.push_back( goodness );
-//     loopclosure_p_T_c.push_back( p_T_c );
-//     edge_mutex.unlock();
-//
-//
-//
-// }
 #ifdef __USE_SELF_LOOPEDGE_MSG
 void NodeDataManager::loopclosure_pose_callback( const solve_keyframe_pose_graph::LoopEdge::ConstPtr& msg  )
 #else
@@ -207,6 +157,71 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
 
 
 }
+
+
+void NodeDataManager::extrinsic_cam_imu_callback( const nav_msgs::Odometry::ConstPtr msg )
+{
+    // __NODEDATAMANAGER_CALLBACKS( cout << TermColor::GREEN() << "[NodeDataManager::extrinsic_cam_imu_callback]" << msg->header.stamp  << TermColor::RESET() << endl; )
+
+    // Acquire lock
+    //      update imu_T_cam,
+    //      update last got timestamp
+    //      set is_imu_cam_extrinsic_available to true
+    {
+        std::lock_guard<std::mutex> lk(imu_cam_mx);
+        PoseManipUtils::geometry_msgs_Pose_to_eigenmat( msg->pose.pose, this->imu_T_cam );
+        this->imu_T_cam_stamp = msg->header.stamp;
+        this->imu_T_cam_available = true;
+
+    }
+
+
+    __NODEDATAMANAGER_CALLBACKS(
+    cout << TermColor::GREEN() << "[NodeDataManager::extrinsic_cam_imu_callback]" << msg->header.stamp  << TermColor::RESET();
+    cout << " imu_T_cam = " << PoseManipUtils::prettyprintMatrix4d(this->imu_T_cam);
+    cout << endl;
+    )
+
+}
+
+
+Matrix4d NodeDataManager::get_imu_T_cam() const
+{
+    std::lock_guard<std::mutex> lk(imu_cam_mx);
+    // Remove this if, once i am confident everythinbg is ok!
+    if( imu_T_cam_available == false )
+    {
+        ROS_ERROR( "[NodeDataManager::get_imu_T_cam] posegraph solver, you requested imu_T_cam aka imu-cam extrinsic calib, but currently it is not available. FATAL ERROR.\n");
+        exit(1);
+    }
+    assert( imu_T_cam_available );
+    return imu_T_cam;
+}
+
+
+void NodeDataManager::get_imu_T_cam( Matrix4d& res, ros::Time& _t ) const
+{
+    std::lock_guard<std::mutex> lk(imu_cam_mx);
+    // Remove this if, once i am confident everythinbg is ok!
+    if( imu_T_cam_available == false )
+    {
+        ROS_ERROR( "[NodeDataManager::get_imu_T_cam] posegraph solver, you requested imu_T_cam aka imu-cam extrinsic calib, but currently it is not available. FATAL ERROR.\n");
+        exit(1);
+    }
+
+    assert( imu_T_cam_available );
+    res = imu_T_cam;
+    _t = imu_T_cam_stamp;
+    return;
+}
+
+bool NodeDataManager::is_imu_T_cam_available() const
+{
+    std::lock_guard<std::mutex> lk(imu_cam_mx);
+    return imu_T_cam_available;
+}
+
+
 
 // internal node queue length info
 void NodeDataManager::print_nodes_lengths() const
@@ -1005,7 +1020,7 @@ int NodeDataManager::n_worlds() const
 
 
 
-void NodeDataManager::print_worlds_info( int verbosity ) const 
+void NodeDataManager::print_worlds_info( int verbosity ) const
 {
 
     bool start_ends_u_of_worlds=false, rel_pose_between_worlds=false, kidnap_info=false, which_world_each_node_belong_to=false ;

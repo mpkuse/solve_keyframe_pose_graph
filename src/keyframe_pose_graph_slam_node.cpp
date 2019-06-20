@@ -269,6 +269,14 @@ int main( int argc, char ** argv)
     ros::Subscriber  sub_gt_ = nh.subscribe( ground_truth_topic, 100, ground_truth_callback );
     #endif
 
+    //-- subscribe to imu_T_cam : imu camera extrinsic calib. Will store this just in case there is a need
+    //   this is published by vins_estimator node.
+    string extrinsic_cam_imu_topic = string("/vins_estimator/extrinsic");
+    ROS_INFO( "Subscribe to extrinsic_cam_imu_topic: %s", extrinsic_cam_imu_topic.c_str() );
+    ros::Subscriber sub_cam_imu_extrinsic = nh.subscribe( extrinsic_cam_imu_topic, 1000, &NodeDataManager::extrinsic_cam_imu_callback, manager );
+
+
+
 
 
     // Setup publishers
@@ -315,7 +323,7 @@ int main( int argc, char ** argv)
     viz->setOdometryPublisher( pub_odometry_opt );
 
     //----Pose Composer---//
-    Composer * cmpr = new Composer( manager, slam, viz );
+    Composer * cmpr = new Composer( manager, slam, viz , nh);
 
     // ++ start the pose assember thread - This is needed for the following publish threads
     // It queries data from manager, slam and assembles the upto date data. This is threadsafe.
@@ -344,7 +352,27 @@ int main( int argc, char ** argv)
     std::thread disjointset_monitor_pub_th( &Composer::disjointset_statusimage_publish_thread, cmpr, 1 );
 
 
+    // TODO
+    // subscribes to w_T_imu @100hz and publish the pose in my world frame at 100hz
+    // implement this in composer class.
+    // /vins_estimator/imu_propagate @ 200hz
+
+    #if 1
+        //++(1) Setup publisher for imu poses 200hz
+        cmpr->setup_200hz_publishers();
+
+
+        //++(2) Setup subscriber / callback for /vins_estimator/imu_propagate topic
+        string imu_worldpose_topic = string("/vins_estimator/imu_propagate");
+        ROS_INFO( "Subscribe to imu_worldpose_topic: %s", imu_worldpose_topic.c_str() );
+        // ros::Subscriber sub_imu_worldpose_topic = nh.subscribe( imu_worldpose_topic, 1000, &Composer::imu_propagate_callback, this );
+        ros::Subscriber sub_imu_worldpose_topic = nh.subscribe( imu_worldpose_topic, 1000, &Composer::imu_propagate_callback, cmpr );
+    #endif
+
+
+
     //----END Pose Composer---//
+
     //--- setup manager publishers threads - adhoc ---//
     std::thread th4( periodic_publish_odoms, manager, viz, 30.0, 0.0, 0.0 ); //if you enable this, dont forget to join(), after spin() returns.
 
