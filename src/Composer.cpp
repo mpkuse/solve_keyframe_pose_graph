@@ -227,10 +227,23 @@ void Composer::pose_assember_thread( int looprate )
 }
 
 
+int Composer::get_last_known_camerapose( Matrix4d& w_T_lastcam, ros::Time& stamp_of_it )
+{
+    std::lock_guard<std::mutex> lk(mx);
+    const int sz = global_lmb.size();
+    if( sz == 0 )
+        return -1;
+
+    auto it = global_lmb.rbegin();
+    w_T_lastcam = *(it);
+
+    stamp_of_it = manager->getNodeTimestamp( sz-1 );
+    return sz-1;
+}
 
 // #define __Composer_bf_traj_publish_thread( msg ) msg;
 #define __Composer_bf_traj_publish_thread( msg ) ;
-void Composer::bf_traj_publish_thread( int looprate )
+void Composer::bf_traj_publish_thread( int looprate ) const
 {
     //--- Options
     const int options_line_color_style = 10; // should be either 10 or 12. 10:color by WorldID; 12:  //color by world setID
@@ -242,6 +255,7 @@ void Composer::bf_traj_publish_thread( int looprate )
     cout << TermColor::GREEN() << "start `Composer::bf_traj_publish_thread` @ " << looprate << " hz" << TermColor::RESET() << endl;
     assert( looprate > 0 && looprate < 50 );
     ros::Rate rate(looprate);
+    bool published_axis = false;
 
     static thread_local std::mt19937 generator;
     std::uniform_int_distribution<int> distribution(0,100);
@@ -327,6 +341,12 @@ void Composer::bf_traj_publish_thread( int looprate )
 
         }
 
+        if( published_axis==false || rand() % 100 == 0 ) {
+        // Publish Axis - publish infrequently
+        Matrix4d _axis_pose = Matrix4d::Identity();
+        viz->publishXYZAxis( _axis_pose, "opt_traj_axis", 0  );
+        published_axis = true;
+        }
     }
 
     cout << TermColor::RED() << "Finished `Composer::bf_traj_publish_thread`\n" << TermColor::RESET() << endl;
@@ -334,7 +354,7 @@ void Composer::bf_traj_publish_thread( int looprate )
 
 
 
-void Composer::cam_visual_publish_thread( int looprate )
+void Composer::cam_visual_publish_thread( int looprate ) const
 {
     //--- Options
     const int options_linewidth_multiplier = 3; //default 3
@@ -381,7 +401,7 @@ void Composer::cam_visual_publish_thread( int looprate )
 
 // #define __Composer__loopedge_publish_thread(msg) msg;
 #define __Composer__loopedge_publish_thread(msg) ;
-void Composer::loopedge_publish_thread( int looprate )
+void Composer::loopedge_publish_thread( int looprate ) const
 {
     cout << TermColor::GREEN() << "start `Composer::loopedge_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
     assert( looprate > 0 && looprate < 50 );
@@ -468,7 +488,7 @@ void Composer::loopedge_publish_thread( int looprate )
 
 // #define __Composer__disjointset_statusimage_publish_thread(msg) msg;
 #define __Composer__disjointset_statusimage_publish_thread(msg) ;
-void Composer::disjointset_statusimage_publish_thread( int looprate )
+void Composer::disjointset_statusimage_publish_thread( int looprate ) const
 {
     cout << TermColor::GREEN() << "start `Composer::disjointset_statusimage_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
     assert( looprate > 0 && looprate < 50 );
@@ -509,3 +529,101 @@ void Composer::disjointset_statusimage_publish_thread( int looprate )
 
     cout << TermColor::RED() << "Finished `Composer::disjointset_statusimage_publish_thread`\n" << TermColor::RESET() << endl;
 }
+
+
+
+
+//------ Publish body pose @200Hz ------//
+
+void Composer::setup_200hz_publishers()
+{
+    // pubx =
+    // cmpr->set_200hz_marker_pub( pubx )
+    string marker_topic = string( "hz200/visualization_marker");
+    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", marker_topic.c_str() );
+    pub_hz200_marker = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
+
+
+    // puby =
+    // cmpr->set_200hz_odom_pub( puby )
+}
+
+
+// #define _Composer__imu_propagate_callback_( msg ) msg;
+#define _Composer__imu_propagate_callback_( msg ) ;
+void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
+{
+    _Composer__imu_propagate_callback_(
+    cout << TermColor::iBLUE() << "[Composer::imu_propagate_callback] t=" << msg->header.stamp << TermColor::RESET() << endl;
+    )
+
+    Matrix4d w_T_imucurr;  // = pose from msg
+    PoseManipUtils::geometry_msgs_Pose_to_eigenmat( msg->pose.pose, w_T_imucurr );
+
+
+
+
+    //
+    // Last Known camera-pose? - after pose graph solver
+    Matrix4d wf_T_camlast;
+    ros::Time cam_t;
+    int posegraph_nodeidx = get_last_known_camerapose( wf_T_camlast, cam_t );
+    if( posegraph_nodeidx < 0  ) {
+        _Composer__imu_propagate_callback_(
+        cout << TermColor::iYELLOW() << "posegraph_nodeidx was neg, meaning non existant last known cam pose\n" << TermColor::RESET();
+        )
+        return ;
+    }
+
+    _Composer__imu_propagate_callback_(
+    cout << "\tLast known camera-pose is at posegraphnode postion=" << posegraph_nodeidx << " is at t=" << cam_t << " which is "<< msg->header.stamp - cam_t << " behind current imu_prop msg\n";
+    )
+
+
+    //
+    // extrinsic-calibration value:  imu_T_cam
+    if( manager->is_imu_T_cam_available() == false ) {
+        _Composer__imu_propagate_callback_(
+        cout << TermColor::iYELLOW() << "imu-cam extrinsic is not yet available\n" << TermColor::RESET() << endl;
+        )
+        return;
+    }
+    Matrix4d imu_T_cam = manager->get_imu_T_cam();
+
+    //
+    // relative pose between when imu at t=now_t and when imu was at t=last_known_t
+    Matrix4d w_T_imulast = manager->getNodePose(posegraph_nodeidx) * imu_T_cam.inverse();
+    Matrix4d imulast_T_imucurr = w_T_imulast.inverse() * w_T_imucurr;
+
+
+    //
+    // Add this relative pose to `wf_T_camlast`
+    Matrix4d wf_T_imucurr = ( wf_T_camlast * imu_T_cam.inverse() ) * imulast_T_imucurr;
+
+
+
+    //
+    // Make viz marker and publish
+    visualization_msgs::Marker imu_m;
+    RosMarkerUtils::init_XYZ_axis_marker( imu_m, 1.0 );
+    imu_m.ns = "hz100_imu";
+    imu_m.id = 0;
+    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_m  );
+    pub_hz200_marker.publish( imu_m );
+
+    visualization_msgs::Marker imu_txt;
+    RosMarkerUtils::init_text_marker( imu_txt );
+    imu_txt.ns = "hz100_imu_txt";
+    imu_txt.text = "IMU@200hz";
+    imu_txt.scale.z = 0.5;
+    RosMarkerUtils::setcolor_to_marker( 1.0, 1.0, 1.0, imu_txt );
+    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_txt  );
+    pub_hz200_marker.publish( imu_txt );
+
+
+
+
+}
+
+
+//------ END Publish body pose @200Hz ------//

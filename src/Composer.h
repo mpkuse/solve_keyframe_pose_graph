@@ -14,6 +14,9 @@
 #include <mutex>
 #include <atomic>
 
+// ROS
+
+
 // Eigen
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -29,12 +32,18 @@ using namespace std;
 class Composer
 {
 public:
-    Composer( const NodeDataManager * manager, const PoseGraphSLAM * slam, const VizPoseGraph * viz )
-    : manager(manager), slam(slam), viz(viz)
+    Composer( const NodeDataManager * manager,
+              const PoseGraphSLAM * slam,
+              const VizPoseGraph * viz,
+              ros::NodeHandle& _nh
+             )
+    : manager(manager), slam(slam), viz(viz), nh( _nh )
     {
         b_pose_assember = false;
         b_bf_traj_publish = false;
         b_cam_visual_publish = false;
+        b_loopedge_publish = false;
+        b_disjointset_statusimage_publish = false;
     }
 
 private:
@@ -45,6 +54,7 @@ private:
     const NodeDataManager * manager;
     const PoseGraphSLAM * slam;
     const VizPoseGraph * viz ;
+    ros::NodeHandle nh;
 
 
 
@@ -57,6 +67,10 @@ public:
     void pose_assember_thread( int looprate = 30 );
     void pose_assember_enable() { b_pose_assember = true;}
     void pose_assember_disable() {b_pose_assember = false; }
+
+    // Returns the last element in `global_lmb` along with the timestamp
+    // Returns -1 when len(global_lmb) is zero, else return the posegraph node index of it. 
+    int get_last_known_camerapose( Matrix4d& w_T_lastcam, ros::Time& stamp_of_it );
 
 private:
     atomic<bool> b_pose_assember;
@@ -71,7 +85,7 @@ private:
     //-------------------------------------------//
     //  makes use of global_jmb and publish all
 public:
-    void bf_traj_publish_thread( int looprate=15 );
+    void bf_traj_publish_thread( int looprate=15 ) const;
     void bf_traj_publish_enable() { b_bf_traj_publish = true;}
     void bf_traj_publish_disable() {b_bf_traj_publish = false; }
 
@@ -86,7 +100,7 @@ private:
     //---------------------//
     //  makes use of global_jmb and publish last cam
 public:
-    void cam_visual_publish_thread( int looprate = 30 );
+    void cam_visual_publish_thread( int looprate = 30 ) const;
     void cam_visual_publish_enable() { b_cam_visual_publish = true;}
     void cam_visual_publish_disable() {b_cam_visual_publish = false; }
 
@@ -100,7 +114,7 @@ private:
     //-------------------------//
     //  makes use of  manager->getEdgeLen() and global_lmb and publish edges.
 public:
-    void loopedge_publish_thread( int looprate = 10 );
+    void loopedge_publish_thread( int looprate = 10 ) const;
     void loopedge_publish_enable() { b_loopedge_publish = true;}
     void loopedge_publish_disable() {b_loopedge_publish = false; }
 
@@ -115,7 +129,7 @@ private:
     //--------------------------------//
     //  makes use of  manager->getEdgeLen() and global_lmb and publish edges.
 public:
-    void disjointset_statusimage_publish_thread( int looprate = 10 );
+    void disjointset_statusimage_publish_thread( int looprate = 10 ) const;
     void disjointset_statusimage_publish_enable() { b_disjointset_statusimage_publish = true;}
     void disjointset_statusimage_publish_disable() {b_disjointset_statusimage_publish = false; }
 
@@ -123,5 +137,15 @@ private:
         atomic<bool> b_disjointset_statusimage_publish;
 
 
+    //-----------------------------------//
+    //--- 200 Hz imu pose publication ---//
+    //-----------------------------------//
+    // Note: The publisher and subscribers are private to this thread itself.
+public:
+    void setup_200hz_publishers();
+    void imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg );
+
+private:
+    ros::Publisher pub_hz200_marker;
 
 };

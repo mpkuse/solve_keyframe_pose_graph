@@ -18,8 +18,8 @@ worlds_handle_raw_ptr = new Worlds();
 
 }
 
-#define __NODEDATAMANAGER_CALLBACKS( msg ) msg;
-// #define __NODEDATAMANAGER_CALLBACKS(msg) ;
+// #define __NODEDATAMANAGER_CALLBACKS( msg ) msg;
+#define __NODEDATAMANAGER_CALLBACKS(msg) ;
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
     // ROS_INFO( "NodeDataManager::camera_pose_callback");
