@@ -69,6 +69,36 @@ void RosMarkerUtils::init_camera_marker( visualization_msgs::Marker& marker, flo
     marker.color.r = 0.2;marker.color.b = 0.;marker.color.g = 0.;
 }
 
+
+
+static void RosMarkerUtils::init_XYZ_axis_marker( visualization_msgs::Marker& axis, float scale, float linewidth_multiplier=1.0 )
+{
+    // visualization_msgs::Marker axis;
+    RosMarkerUtils::init_line_marker( axis );
+    // axis.id = id;
+    // axis.ns = ns.c_str();
+    axis.scale.x = 0.2*linewidth_multiplier; // (scale<0)?1.0:scale;
+
+    float f = scale;
+    // Add pts
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, true );
+    RosMarkerUtils::add_point_to_marker( f,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,f,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,0, axis, false );
+    RosMarkerUtils::add_point_to_marker( 0,0,f, axis, false );
+
+    // Add colors to each pt
+    RosMarkerUtils::add_colors_to_marker( 1.0,0,0, axis, true );
+    RosMarkerUtils::add_colors_to_marker( 1.0,0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,1.0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,1.0,0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,0,1.0, axis, false );
+    RosMarkerUtils::add_colors_to_marker( 0,0,1.0, axis, false );
+
+}
+
+
 void RosMarkerUtils::setpose_to_marker( const Matrix4d& w_T_c, visualization_msgs::Marker& marker )
 {
     Quaterniond quat( w_T_c.topLeftCorner<3,3>() );

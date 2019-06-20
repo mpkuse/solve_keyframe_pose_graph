@@ -37,6 +37,8 @@ public:
 
     /// Initialize a camera with a few lines. You need to set the `ns` and `id` before publishing.
     static void init_camera_marker( visualization_msgs::Marker& marker, float cam_size );
+    static void init_XYZ_axis_marker( visualization_msgs::Marker& marker, float size=1.0, float linewidth_multiplier=1.0 );
+
     static void init_text_marker( visualization_msgs::Marker &marker );
     static void init_line_strip_marker( visualization_msgs::Marker &marker );
     static void init_line_marker( visualization_msgs::Marker &marker );
