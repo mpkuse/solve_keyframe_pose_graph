@@ -269,7 +269,16 @@ int main( int argc, char ** argv)
     ros::Subscriber  sub_gt_ = nh.subscribe( ground_truth_topic, 100, ground_truth_callback );
     #endif
 
+    //-- subscribe to imu_T_cam : imu camera extrinsic calib. Will store this just in case there is a need
+    //   this is published by vins_estimator node.
+    string extrinsic_cam_imu_topic = string("/vins_estimator/extrinsic");
+    ROS_INFO( "Subscribe to extrinsic_cam_imu_topic: %s", extrinsic_cam_imu_topic.c_str() );
+    ros::Subscriber sub_cam_imu_extrinsic = nh.subscribe( extrinsic_cam_imu_topic, 1000, &NodeDataManager::extrinsic_cam_imu_callback, manager );
 
+
+    // TODO
+    // subscribes to w_T_imu @100hz and publish the pose in my world frame at 100hz
+    // implement this in composer class.
 
     // Setup publishers
     //--- Marker ---//
@@ -303,7 +312,7 @@ int main( int argc, char ** argv)
     // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
     slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
-    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
     std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
@@ -320,33 +329,33 @@ int main( int argc, char ** argv)
     // ++ start the pose assember thread - This is needed for the following publish threads
     // It queries data from manager, slam and assembles the upto date data. This is threadsafe.
     cmpr->pose_assember_enable();
-    // cmpr->pose_assember_disable();
+    cmpr->pose_assember_disable();
     std::thread assember_th( &Composer::pose_assember_thread, cmpr, 30 );
 
     // ++ start bf_traj_publish_thread
     cmpr->bf_traj_publish_enable();
-    // cmpr->bf_traj_publish_disable();
+    cmpr->bf_traj_publish_disable();
     std::thread bf_pub_th( &Composer::bf_traj_publish_thread, cmpr, 15 );
 
     // ++ start camera visual publisher thread
     cmpr->cam_visual_publish_enable();
-    // cmpr->cam_visual_publish_disable();
+    cmpr->cam_visual_publish_disable();
     std::thread cam_visual_pub_th( &Composer::cam_visual_publish_thread, cmpr, 30 );
 
     // ++ loop edge publish thread
     cmpr->loopedge_publish_enable();
-    // cmpr->loopedge_publish_disable();
+    cmpr->loopedge_publish_disable();
     std::thread loopedge_pub_th( &Composer::loopedge_publish_thread, cmpr, 10 );
 
     // ++ disjointset status image
     cmpr->disjointset_statusimage_publish_enable();
-    // cmpr->disjointset_statusimage_publish_disable();
+    cmpr->disjointset_statusimage_publish_disable();
     std::thread disjointset_monitor_pub_th( &Composer::disjointset_statusimage_publish_thread, cmpr, 1 );
 
 
     //----END Pose Composer---//
     //--- setup manager publishers threads - adhoc ---//
-    std::thread th4( periodic_publish_odoms, manager, viz, 30.0, 0.0, 0.0 ); //if you enable this, dont forget to join(), after spin() returns.
+    // std::thread th4( periodic_publish_odoms, manager, viz, 30.0, 0.0, 0.0 ); //if you enable this, dont forget to join(), after spin() returns.
 
 
 
@@ -373,7 +382,7 @@ int main( int argc, char ** argv)
     cmpr->disjointset_statusimage_publish_disable();
 
 
-    th4.join();
+    // th4.join();
 
     th_slam.join();
     assember_th.join();
