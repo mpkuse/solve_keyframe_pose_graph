@@ -1077,9 +1077,9 @@ void NodeDataManager::print_worlds_info( int verbosity ) const
 
     if( rel_pose_between_worlds ) {
     //// Relative transforms between worlds
-    this->getWorldsPtr()->print_summary(2);
+    this->getWorldsConstPtr()->print_summary(2);
     } else {
-    this->getWorldsPtr()->print_summary(0);
+    this->getWorldsConstPtr()->print_summary(0);
     }
 
 
