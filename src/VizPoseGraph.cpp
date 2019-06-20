@@ -448,7 +448,7 @@ void VizPoseGraph::publishSlamResidueVisual( int n ) const
 
 void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b,
     float linewidth_multiplier, float camera_size_multiplier,
-    float offset_x, float offset_y, float offset_z )
+    float offset_x, float offset_y, float offset_z ) const
 {
     visualization_msgs::Marker marker2 ;
     RosMarkerUtils::init_camera_marker( marker2, camera_size_multiplier );
@@ -463,7 +463,7 @@ void VizPoseGraph::publishCameraVisualMarker( const Matrix4d& wTc, const string&
     pub_pgraph.publish( marker2 );
 }
 
-void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale )
+void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale ) const
 {
     visualization_msgs::Marker axis;
     RosMarkerUtils::init_line_marker( axis );
@@ -495,13 +495,13 @@ void VizPoseGraph::publishXYZAxis( const Matrix4d& wT_axis, const string ns, int
 
 }
 
-void VizPoseGraph::publishThisVisualMarker( const visualization_msgs::Marker& the_marker )
+void VizPoseGraph::publishThisVisualMarker( const visualization_msgs::Marker& the_marker ) const
 {
     pub_pgraph.publish( the_marker );
 }
 
 
-void VizPoseGraph::publishImage( const cv::Mat& im )
+void VizPoseGraph::publishImage( const cv::Mat& im ) const
 {
     sensor_msgs::ImagePtr msg = cv_bridge::CvImage( std_msgs::Header(), "bgr8", im ).toImageMsg();
     pub_image.publish( msg );

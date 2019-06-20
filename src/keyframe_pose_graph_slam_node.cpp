@@ -1468,7 +1468,7 @@ int main( int argc, char ** argv)
     // 12 //< color the line with setID( worldID )
     options.line_color_style = 10;
     options.linewidth_multiplier = 3; //0.25; //8
-    options.udumbe_offset_y = 30.0;
+    options.udumbe_offset_y = 0.0;
     std::thread th6( opt_traj_publisher_colored_by_world, manager, slam, viz, options );
 
 

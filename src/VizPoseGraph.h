@@ -65,11 +65,11 @@ public:
     void publishSlamResidueVisual( int n ) const;
     void publishCameraVisualMarker( const Matrix4d& wTc, const string& ns, float r, float g, float b,
         float linewidth_multiplier=1.0, float camera_size_multiplier=10.,
-        float offset_x=0.0, float offset_y=0.0, float offset_z=0.0  );
+        float offset_x=0.0, float offset_y=0.0, float offset_z=0.0  ) const;
 
-    void publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale=1.0 );
-    void publishThisVisualMarker( const visualization_msgs::Marker& the_marker );
-    void publishImage( const cv::Mat& im );
+    void publishXYZAxis( const Matrix4d& wT_axis, const string ns, int id, float scale=1.0 ) const;
+    void publishThisVisualMarker( const visualization_msgs::Marker& the_marker ) const;
+    void publishImage( const cv::Mat& im ) const;
 
 private:
     const NodeDataManager * manager=NULL;
