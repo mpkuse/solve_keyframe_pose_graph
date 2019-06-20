@@ -14,7 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cv_bridge
   #nap
-  cerebro
+  #cerebro
   nav_msgs
 )
 
@@ -34,6 +34,16 @@ set( CMAKE_CXX_FLAGS "-fpermissive -std=c++11 -O3" )
 
 
 
+
+
+
+
+add_message_files(
+  FILES
+  LoopEdge.msg
+)
+
+
 generate_messages(
   DEPENDENCIES
   std_msgs
@@ -41,16 +51,17 @@ generate_messages(
   geometry_msgs
   nav_msgs
   #nap
-  cerebro
+  #cerebro
 )
-
 
 
 catkin_package(
   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime image_transport cv_bridge
   #nap
-  cerebro
+  #cerebro
 )
+
+
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
@@ -75,7 +86,8 @@ add_executable( keyframe_pose_graph_slam
 
 
 # this is needed to indicate this this executable depends on the messages of the pkg.
-add_dependencies(keyframe_pose_graph_slam cerebro_generate_messages_cpp)
+#add_dependencies(keyframe_pose_graph_slam cerebro_generate_messages_cpp)
+#add_dependencies(keyframe_pose_graph_slam )
 
 
 #add_executable( test_disjointset_imp src/test_disjointset.cpp )

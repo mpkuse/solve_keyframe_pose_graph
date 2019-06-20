@@ -39,7 +39,13 @@
 // ros messages
 #include <nav_msgs/Path.h>
 // #include <nap/NapMsg.h>
+#define __USE_SELF_LOOPEDGE_MSG
+
+#ifdef __USE_SELF_LOOPEDGE_MSG
+#include <solve_keyframe_pose_graph/LoopEdge.h>
+#else
 #include <cerebro/LoopEdge.h>
+#endif
 #include <nav_msgs/Odometry.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/ColorRGBA.h>
@@ -75,7 +81,11 @@ public:
     // Callbacks core
     void camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg );
     // void loopclosure_pose_callback( const nap::NapMsg::ConstPtr& msg  );
+    #ifdef __USE_SELF_LOOPEDGE_MSG
+    void loopclosure_pose_callback( const solve_keyframe_pose_graph::LoopEdge::ConstPtr& msg  );
+    #else
     void loopclosure_pose_callback( const cerebro::LoopEdge::ConstPtr& msg  );
+    #endif
 
     void print_nodes_lengths() const;
 

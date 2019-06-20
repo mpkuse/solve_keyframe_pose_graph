@@ -229,6 +229,7 @@ struct assoc_s
 #endif
 
 
+
 int main( int argc, char ** argv)
 {
     ros::init(argc, argv, "keyframe_pose_graph_slam_node");
@@ -302,6 +303,7 @@ int main( int argc, char ** argv)
     // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
     slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
     std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
