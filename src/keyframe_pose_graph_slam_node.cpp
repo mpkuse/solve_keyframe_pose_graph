@@ -336,6 +336,7 @@ int main( int argc, char ** argv)
     // cmpr->bf_traj_publish_disable();
     std::thread bf_pub_th( &Composer::bf_traj_publish_thread, cmpr, 15 );
 
+
     // ++ start camera visual publisher thread
     cmpr->cam_visual_publish_enable();
     // cmpr->cam_visual_publish_disable();
