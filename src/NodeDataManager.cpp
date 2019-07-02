@@ -804,6 +804,150 @@ const ros::Time NodeDataManager::last_kidnap_started() const
     }
 }
 
+json NodeDataManager::kidnap_data_to_json() const
+{
+    std::lock_guard<std::mutex> lk(mutex_kidnap);
+    json A;
+    for( int i=0 ; i<kidnap_starts.size() ; i++ )
+    {
+        json _a;
+        _a["stampNSec"] = kidnap_starts[i].toNSec();
+        A.push_back( _a );
+    }
+
+    json B;
+    for( int i=0 ; i<kidnap_ends.size() ; i++ )
+    {
+        json _b;
+        _b["stampNSec"] = kidnap_ends[i].toNSec();
+        B.push_back( _b );
+    }
+
+    json obj;
+    obj["kidnap_starts"] = A;
+    obj["kidnap_ends"] = B;
+    return obj;
+}
+
+
+//
+// Sample input
+        // "kidnap_ends": [
+        //     {
+        //         "stampNSec": 1550116863137285233
+        //     },
+        //     {
+        //         "stampNSec": 1550116901956894159
+        //     }
+        // ],
+        // "kidnap_starts": [
+        //     {
+        //         "stampNSec": 1550116842603365660
+        //     },
+        //     {
+        //         "stampNSec": 1550116885619684696
+        //     }
+        // ]
+bool NodeDataManager::load_kidnap_data_from_json( json obj )
+{
+    cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ NodeDataManager::load_kidnap_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+
+    int n_kidnap_starts = obj.at("kidnap_starts").size();
+    cout << "[NodeDataManager::load_kidnap_data_from_json] I found n_kidnap_starts=" << n_kidnap_starts << endl;
+    kidnap_starts.clear();
+    for( int i=0 ; i<n_kidnap_starts ; i++ )
+    {
+        ros::Time _tmpt = ros::Time().fromNSec( obj["kidnap_starts"][i]["stampNSec"] );
+        cout << "\t" << _tmpt ;
+        kidnap_starts.push_back( _tmpt );
+    }
+    cout << endl;
+
+
+    int n_kidnap_ends = obj.at("kidnap_ends").size();
+    cout << "[NodeDataManager::load_kidnap_data_from_json] I found n_kidnap_ends=" << n_kidnap_ends << endl;
+    kidnap_ends.clear();
+    for( int i=0 ; i<n_kidnap_ends ; i++ )
+    {
+        ros::Time _tmpt = ros::Time().fromNSec( obj["kidnap_starts"][i]["stampNSec"] );
+        cout << "\t" <<  _tmpt;
+        kidnap_ends.push_back( _tmpt );
+    }
+    cout << endl;
+
+    cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ DONE NodeDataManager::load_kidnap_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+    return true;
+}
+
+
+// Sample
+// "SolvedPoseGraph":
+// [
+//         {
+//             "seq": 0,
+//             "setID_of_worldID": 0,
+//             "stampNSec": 1550116822619016171,
+//             "w_T_c": {
+//                 "cols": 4,
+//                 "data": "-0.5126642798427126, 0.02348155480372338, 0.8582679958831929, 0.1522650121223336\n-0.8550100366965891, -0.1051413903718039, -0.5078416339556862, 0.06817469369769494\n0.07831457923943769, -0.9941800162016352, 0.07397920021104687, 0.07354274867141557\n0, 0, 0, 1",
+//                 "data_pretty": ":YPR(deg)=(-120.947,-4.492,-85.744)  :TxTyTz=(0.152,0.068,0.074)",
+//                 "rows": 4
+//             },
+//             "worldID": 0
+//         },
+//         {
+//             "seq": 1,
+//             "setID_of_worldID": 0,
+//             "stampNSec": 1550116822718936205,
+//             "w_T_c": {
+//                 "cols": 4,
+//                 "data": "-0.5138138579767237, 0.02259357261832001, 0.8576041335181481, 0.1867067427757811\n-0.8534146182324505, -0.1155687086714443, -0.5082591494141291, 0.08460685550314911\n0.08762881226077235, -0.9930424986134048, 0.07866248921443475, 0.07945286857626968\n0, 0, 0, 1",
+//                 "data_pretty": ":YPR(deg)=(-121.051,-5.027,-85.471)  :TxTyTz=(0.187,0.085,0.079)",
+//                 "rows": 4
+//             },
+//             "worldID": 0
+//         },
+//         {
+//             "seq": 2,
+//             "setID_of_worldID": 0,
+//             "stampNSec": 1550116822818856239,
+//             "w_T_c": {
+//                 "cols": 4,
+//                 "data": "-0.603018213051328, 0.02022099545331435, 0.7974710941916718, 0.2303592300779559\n-0.791549852842599, -0.1393364478125909, -0.5950077182489573, 0.0736287467796735\n0.09908514113248795, -0.9900386182638774, 0.1000283417482688, 0.08264907108338827\n0, 0, 0, 1",
+//                 "data_pretty": ":YPR(deg)=(-127.301,-5.686,-84.231)  :TxTyTz=(0.230,0.074,0.083)",
+//                 "rows": 4
+//             },
+//             "worldID": 0
+//         },
+//         .
+//         .
+//         .
+// ]
+bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
+{
+    cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ NodeDataManager::load_solved_posegraph_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+
+    int n_nodes = obj.at("SolvedPoseGraph").size();
+    cout << "[NodeDataManager::load_solved_posegraph_data_from_json] I see "<< n_nodes << " nodes in the json\n";
+
+    // I assume worlds (the disjointset) and kidnap timestamps are already populated before calling this.
+    // This assumption is used in verifying the loaded worldid etc from what is there in the data
+    for( int i=0 ; i<n_nodes ; i++ )
+    {
+        int _seq =  obj.at("SolvedPoseGraph").at(i).at("seq");
+        int _setID_of_worldID = obj.at("SolvedPoseGraph").at(i).at("setID_of_worldID");
+        int _worldID = obj.at("SolvedPoseGraph").at(i).at("worldID");
+        ros::Time _tnode = ros::Time().fromNSec( obj.at("SolvedPoseGraph").at(i).at("stampNSec") );
+
+        // verify worldID and setID_of_worldID
+        
+
+    }
+
+    cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ DONE NodeDataManager::load_solved_posegraph_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+    return true;
+}
+
 
 int NodeDataManager::n_kidnaps() const
 {

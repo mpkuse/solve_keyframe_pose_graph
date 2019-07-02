@@ -306,13 +306,8 @@ int main( int argc, char ** argv)
 
     // another class for the core pose graph optimization
     PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
-    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
-    // slam->new_optimize6DOF_enable();
-    // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
-    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
-    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
-    std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
+
 
 
     // another class for viz.
@@ -324,6 +319,14 @@ int main( int argc, char ** argv)
 
     //----Pose Composer---//
     Composer * cmpr = new Composer( manager, slam, viz , nh);
+
+    #define __LOAD_STATE__ 0
+    #ifdef __LOAD_STATE__
+    cmpr->loadStateFromDisk( "/Bulk_Data/chkpts_posegraph_solver" );
+    cout << "PREMATURE EXIT\n";
+    exit(1);
+    #endif
+
 
     // ++ start the pose assember thread - This is needed for the following publish threads
     // It queries data from manager, slam and assembles the upto date data. This is threadsafe.
@@ -378,6 +381,13 @@ int main( int argc, char ** argv)
     std::thread th4( periodic_publish_odoms, manager, viz, 30.0, 0.0, 0.0 ); //if you enable this, dont forget to join(), after spin() returns.
 
 
+    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    // slam->new_optimize6DOF_enable();
+    // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
+    std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
+
 
 
     // while(ros::ok()) publish debug stuff
@@ -412,7 +422,11 @@ int main( int argc, char ** argv)
     disjointset_monitor_pub_th.join();
 
 
-
+    //make this to 1 to save state to file upon exit
+    #define __SAVE_STATE__ 1
+    #if __SAVE_STATE__
+    cmpr->saveStateToDisk( "/Bulk_Data/chkpts_posegraph_solver" );
+    #endif
 
     #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__

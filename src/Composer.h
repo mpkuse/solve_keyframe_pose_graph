@@ -30,6 +30,11 @@ using namespace std;
 #include "utils/RosMarkerUtils.h"
 #include "utils/TermColor.h"
 
+// For saveStateToDisk
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+#include "utils/RawFileIO.h"
+
 class Composer
 {
 public:
@@ -149,4 +154,9 @@ public:
 private:
     ros::Publisher pub_hz200_marker;
 
+
+    /////////////// Save State ////////////////////
+public:
+    bool saveStateToDisk( string save_dir_path );
+    bool loadStateFromDisk( string save_dir_path );
 };

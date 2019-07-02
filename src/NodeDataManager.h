@@ -159,6 +159,9 @@ public:
     ros::Time stamp_of_kidnap_i_started( int i ) const;
     ros::Time stamp_of_kidnap_i_ended( int i ) const;
     int n_kidnaps() const;
+    json kidnap_data_to_json() const;
+    bool load_kidnap_data_from_json( json obj ); //< See comments in the implementation for json input format
+    bool load_solved_posegraph_data_from_json( json obj ); //< See comments in the implementation for json input format
 
 
     int nodeidx_of_world_i_started( int i ) const;

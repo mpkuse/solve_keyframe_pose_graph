@@ -627,3 +627,147 @@ void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
 
 
 //------ END Publish body pose @200Hz ------//
+
+
+
+
+
+bool Composer::saveStateToDisk( string save_dir_path )
+{
+    //---
+    // rm -rf && mkdir
+    cout << TermColor::GREEN();
+    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+    cout << "^^^^^^^^^^    Composer::saveStateToDisk  ^^^^^^^^^^\n";
+    cout << "^^^^^^^^^^    DIR=" << save_dir_path ;
+    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+    cout << TermColor::RESET();
+
+    // TODO: rm -rf save_folder_name ; mkdir save_folder_name
+    string system_cmd0 = string( "rm -rf ") + save_dir_path + " && mkdir "+ save_dir_path;
+    const int rm_dir_err0 = RawFileIO::exec_cmd( system_cmd0 );
+    if ( rm_dir_err0 == -1 )
+    {
+        cout << TermColor::RED() << "[Composer::saveStateToDiskr] Cannot mkdir folder: " << save_dir_path << "!\n" << TermColor::RESET() << endl;
+        cout << "So not saveing state to disk...return false\n";
+        return false;
+    }
+
+
+    //---
+    // save pose graph (corrected poses)
+    IOFormat CSVFormat(FullPrecision, DontAlignCols, ", ", "\n");
+    json obj;
+
+    json pose_graph;
+    for( int i=0 ; i<global_lmb.size() ; i++ )
+    {
+        json this_node;
+        Matrix4d wTc = global_lmb[i];
+
+        // wj_T_c : Corrected poses
+        this_node["w_T_c"]["rows"] = wTc.rows();
+        this_node["w_T_c"]["cols"] = wTc.rows();
+        std::stringstream ss;
+        ss <<  wTc.format(CSVFormat);
+        this_node["w_T_c"]["data"] = ss.str();
+        this_node["w_T_c"]["data_pretty"] = PoseManipUtils::prettyprintMatrix4d(wTc);
+
+
+        // j : setID of the world
+        // k : worldID of this pose
+        int worldid = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+        this_node["worldID"] = worldid;
+        this_node["setID_of_worldID"] = manager->getWorldsConstPtr()->find_setID_of_world_i( worldid );
+        this_node["stampNSec"] = manager->getNodeTimestamp(i).toNSec();
+        this_node["seq"] = i;
+
+        pose_graph.push_back( this_node );
+    }
+    obj["SolvedPoseGraph"] = pose_graph;
+
+    //---
+    // Kidnap Timestamps
+    obj["KidnapTimestamps"] = manager->kidnap_data_to_json();
+    cout << "In len( obj[\"KidnapTimestamps\"][\"kidnap_starts\"] ) = " << obj["KidnapTimestamps"]["kidnap_starts"].size() << endl;
+    cout << "In len( obj[\"KidnapTimestamps\"][\"kidnap_ends\"] ) = " << obj["KidnapTimestamps"]["kidnap_ends"].size() << endl;
+
+    //---
+    // World poses data and disjoint_set.
+    obj["WorldsData"] = manager->getWorldsConstPtr()->saveStateToDisk();
+
+
+
+
+    //---
+    // Save JSON
+    cout << "obj[\"SolvedPoseGraph\"].size()=" << obj["SolvedPoseGraph"].size() << endl;
+    RawFileIO::write_string( save_dir_path+"/solved_posegraph.json", obj.dump(4) );
+    cout << TermColor::GREEN() <<  "DONE........    Composer::saveStateToDisk  ^^^^^^^^^^\n" << TermColor::RESET();
+    return true;
+}
+
+
+bool Composer::loadStateFromDisk( string save_dir_path )
+{
+    cout << TermColor::GREEN();
+    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+    cout << "^^^^^^^^^^    Composer::loadStateFromDisk  ^^^^^^^^^^\n";
+    cout << "^^^^^^^^^^    DIR=" << save_dir_path ;
+    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+    cout << TermColor::RESET();
+
+    //---
+    // Load JSON
+    string json_fname = save_dir_path+"/solved_posegraph.json";
+    cout << TermColor::GREEN() << "[Composer::loadStateFromDisk]Open file: " << json_fname << TermColor::RESET() <<  endl;
+    std::ifstream json_fileptr(json_fname);
+    if( !json_fileptr )
+    {
+        ROS_ERROR( "[Composer::loadStateFromDisk]Cannot load from previous state" );
+        cout << TermColor::RED() << "[Composer::loadStateFromDisk]Fail to open" << json_fname << " file, perhaps it doesnt exist. Cannot load from previous state.\nEXIT(1)"<< endl;
+        exit(1);
+    }
+    json json_obj;
+    json_fileptr >> json_obj;
+    cout << "[DataManager::loadStateFromDisk]Successfully opened file and loaded data "<< json_fname << endl;
+    json_fileptr.close();
+
+
+    //---
+    // Load World Data into class Worlds
+    bool status_w = manager->getWorldsPtr()->loadStateFromDisk( json_obj["WorldsData"] );
+    if( status_w == false ) {
+        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->getWorldsPtr()->loadStateFromDisk returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
+        exit(1);
+    }
+    manager->getWorldsPtr()->print_summary();
+
+
+
+    //---
+    // Load kidnap timestamps into manager->kidnap_data
+    bool status_k = manager->load_kidnap_data_from_json( json_obj["KidnapTimestamps"] );
+    if( status_k == false )
+    {
+        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->load_kidnap_data_from_json() returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
+        exit(1);
+    }
+
+
+    //---
+    // Load Pose Graph
+    bool status_pg = manager->load_solved_posegraph_data_from_json( json_obj );
+    if( status_pg == false )
+    {
+        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->load_solved_posegraph_data_from_json() returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
+        exit(1);
+    }
+
+    //---
+    // Adjust variables in object slam (in PoseGraphSLAM), especially the solved_until
+    
+
+
+
+}
