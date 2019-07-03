@@ -478,12 +478,13 @@ bool Worlds::loadStateFromDisk( json _objk )
             return false;
         }
 
-
+        cout << "\t" << node_b << "_T_" << node_a ;
         rel_pose_between_worlds__wb_T_wa[ p ] = wb_T_wa;
         rel_pose_between_worlds__wb_T_wa___info_string[ p ] = info_wb_T_wa;
 
 
     }
+    cout << endl;
     cout << "OK...rel_pose_between_worlds__wb_T_wa\n";
 
 

@@ -832,6 +832,23 @@ const ros::Time NodeDataManager::last_kidnap_started() const
     }
 }
 
+
+void NodeDataManager::mark_as_kidnapped_and_signal_end_of_world() //this is needed to be done when CTRL+C is called ie. when saveStateToDisk is to be performed
+{
+    cout << "[NodeDataManager::mark_as_kidnapped_and_signal_end_of_world]" << endl;
+    ros::Time last_ti_stamp = * ( node_timestamps.rbegin() );
+    mark_as_kidnapped( last_ti_stamp );
+    worlds_handle_raw_ptr->world_ends( last_ti_stamp );
+}
+
+void NodeDataManager::mark_as_unkidnapped_and_signal_start_of_world( ros::Time _t_begin) //this is called when loading data from disk
+{
+    cout << "[NodeDataManager::mark_as_unkidnapped_and_signal_start_of_world] _t_begin=" << _t_begin << endl;
+
+    mark_as_unkidnapped( _t_begin );
+    worlds_handle_raw_ptr->world_starts( _t_begin );
+}
+
 json NodeDataManager::kidnap_data_to_json() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
@@ -993,13 +1010,43 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
         int _worldID = obj.at("SolvedPoseGraph").at(i).at("worldID");
         ros::Time _tnode = ros::Time().fromNSec( obj.at("SolvedPoseGraph").at(i).at("stampNSec") );
 
-        Matrix4d ___w_T_c;
+        Matrix4d ___w_T_c; //< this is actually ws_T_cam (cam position in world-set-id, )
         bool poseloadstatus=RawFileIO::read_eigen_matrix4d_fromjson(  obj.at("SolvedPoseGraph").at(i).at("w_T_c"), ___w_T_c );
         if( poseloadstatus == false )
         {
             cout << TermColor::RED() << "When loading SolvedPoseGraph[" << i << "], RawFileIO::read_eigen_matrix4d_fromjson returned false. This means, I cannot read the pose from json file\n" << TermColor::RESET() ;
             return false;
         }
+
+
+        if( i==0 || i==1 || i==2 || i==n_nodes-1 || i== n_nodes-2) {
+            cout << "i=" << i << "\t";
+            cout << "t=" << _tnode << "\t";
+            cout << "_worldID=" << _worldID << "\t";
+            cout << "_setID_of_worldID=" << _setID_of_worldID << "\t";
+            cout << "wset_T_cam=" << PoseManipUtils::prettyprintMatrix4d( ___w_T_c ) << endl;
+        }
+        if( i==3 ) {
+            cout << ".\n.\n.\n";
+        }
+
+        // For everything to be working correctly, I need to store the wTc and not wsTc
+        // w_T_c := w_T_ws * ws_T_c
+        if( _worldID >= 0 && _worldID != _setID_of_worldID )
+        {
+            Matrix4d wTws = Matrix4d::Identity();
+            if( getWorldsConstPtr()->is_exist(_worldID,_setID_of_worldID) )
+                wTws = getWorldsConstPtr()->getPoseBetweenWorlds( _worldID,_setID_of_worldID );
+            else {
+                cout << "[NodeDataManager::load_solved_posegraph_data_from_json] ERROR";
+                cout << "at i="<< i << "you requesting a pose between the worlds "<<  _worldID << " and " << _setID_of_worldID << " that does not exist. This cannot be happening\n";
+                getWorldsConstPtr()->print_summary();
+                exit(1);
+            }
+            Matrix4d f_wTc = wTws * ___w_T_c;
+            ___w_T_c = f_wTc;
+        }
+
 
         // verify worldID and setID_of_worldID
         #if 1

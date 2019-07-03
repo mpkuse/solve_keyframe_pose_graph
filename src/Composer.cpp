@@ -54,12 +54,14 @@ void Composer::pose_assember_thread( int looprate )
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
+            int setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( world_id  );
             __Composer__pose_assember_thread_posedebug(
-            cout << "i=" << i << " world#" << world_id << endl;
+            cout << "\t%% i=" << i << " world#" << world_id << " setID_of_worldID=" << setID_of_worldID << endl;
             )
 
             if( i>=0 && i<= ____solvedUntil )
             {
+                __Composer__pose_assember_thread_posedebug( cout << "in i>=0 && i<= ____solvedUntil\n" );
                 Matrix4d w_T_c;
                 // If the optimized pose exists use that else use the odometry pose
                 int from_slam_or_from_odom = -1; // 1: from slam ; 2: from odom ; 3: kidnapped node
@@ -74,6 +76,9 @@ void Composer::pose_assember_thread( int looprate )
                             w_T_c = manager->getNodePose( i );
                             // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
                             from_slam_or_from_odom = 2;
+
+
+
                         }
                     }
                 } else {
@@ -107,11 +112,19 @@ void Composer::pose_assember_thread( int looprate )
 
             if( i>(____solvedUntil)  )
             {
+                __Composer__pose_assember_thread_posedebug( cout << "in i>(____solvedUntil)\n" );
+
                 int last_idx=-1;
                 Matrix4d w_TM_i;
+                #if 1 // added during loadStateFromDisk implementation
+                int w_TM_i_from_mgr_or_from_slam = -1; // 0: mgr, 1: slam
+                #endif
 
                 if( ____solvedUntil == 0 ) {
                     w_TM_i = manager->getNodePose( i );
+                    #if 1 // added during loadStateFromDisk implementation
+                    w_TM_i_from_mgr_or_from_slam = 0;
+                    #endif 
                 } else {
                     if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
                         last_idx = ____solvedUntil;}
@@ -150,6 +163,29 @@ void Composer::pose_assember_thread( int looprate )
                     Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
                     w_TM_i = w_T_last * last_M_i;
                 }
+
+
+                #if 1
+                // added during loadStateFromDisk implementation
+                // idea is always set ws_T_c and not the usual w_T_c
+                //  ws_T_c := ws_T_w * w_T_c
+                if( world_id != setID_of_worldID && w_TM_i_from_mgr_or_from_slam==0 ) {
+                    __Composer__pose_assember_thread_posedebug(
+                    cout << "[world_id != setID_of_worldID]i=" << i << " world#" << world_id << " setID_of_worldID=" << setID_of_worldID << endl;
+                    );
+                    if( manager->getWorldsConstPtr()->is_exist(setID_of_worldID,world_id) ) {
+                        __Composer__pose_assember_thread_posedebug(
+                        cout << "[world_id != setID_of_worldID]relative pose exist beween these worlds.\n";
+                        );
+                        Matrix4d ws_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds(setID_of_worldID,world_id);
+                        Matrix4d ws_T_c = ws_T_w * w_TM_i;
+                        w_TM_i = ws_T_c;
+                    } else {
+                        __Composer__pose_assember_thread_posedebug( cout << "[world_id != setID_of_worldID]relative pose doesnt exist beween these worlds.\n"; );
+                    }
+                }
+
+                #endif // end of addition during oadStateFromDisk implementation
 
 
                 if( jmb.count( world_id ) ==  0 ) {

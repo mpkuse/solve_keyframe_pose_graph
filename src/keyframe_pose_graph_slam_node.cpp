@@ -320,7 +320,7 @@ int main( int argc, char ** argv)
     //----Pose Composer---//
     Composer * cmpr = new Composer( manager, slam, viz , nh);
 
-    #define __LOAD_STATE__ 1 //set this to 1 to enable, 0 to disable
+    #define __LOAD_STATE__ 0 //set this to 1 to enable, 0 to disable
     #if __LOAD_STATE__
     cmpr->loadStateFromDisk( "/Bulk_Data/chkpts_posegraph_solver" );
     // cout << "PREMATURE EXIT\n";
@@ -423,7 +423,7 @@ int main( int argc, char ** argv)
 
 
     //make this to 1 to save state to file upon exit, 0 to disable saving to file
-    #define __SAVE_STATE__ 0
+    #define __SAVE_STATE__ 1
     #if __SAVE_STATE__
     cmpr->saveStateToDisk( "/Bulk_Data/chkpts_posegraph_solver" );
     #endif
