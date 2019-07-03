@@ -160,6 +160,21 @@ public:
     ros::Time stamp_of_kidnap_i_ended( int i ) const;
     int n_kidnaps() const;
     json kidnap_data_to_json() const;
+    void mark_as_kidnapped_and_signal_end_of_world() //this is needed to be done when CTRL+C is called ie. when saveStateToDisk is to be performed
+    {
+        cout << "[NodeDataManager::mark_as_kidnapped_and_signal_end_of_world]" << endl;
+        ros::Time last_ti_stamp = * ( node_timestamps.rbegin() );
+        mark_as_kidnapped( last_ti_stamp );
+        worlds_handle_raw_ptr->world_ends( last_ti_stamp );
+    }
+
+    void mark_as_unkidnapped_and_signal_start_of_world( ros::Time _t_begin) //this is called when loading data from disk
+    {
+        cout << "[NodeDataManager::mark_as_unkidnapped_and_signal_start_of_world] _t_begin=" << _t_begin << endl;
+
+        mark_as_unkidnapped( _t_begin );
+        worlds_handle_raw_ptr->world_starts( _t_begin );
+    }
     bool load_kidnap_data_from_json( json obj ); //< See comments in the implementation for json input format
     bool load_solved_posegraph_data_from_json( json obj ); //< See comments in the implementation for json input format
 

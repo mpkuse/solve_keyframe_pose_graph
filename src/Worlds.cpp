@@ -396,6 +396,7 @@ json Worlds::saveStateToDisk() const
     //---
     // rel_pose_between_worlds__wb_T_wa and rel_pose_between_worlds__wb_T_wa___info_string
     cout << "[Worlds::saveStateToDisk]rel_pose_between_worlds__wb_T_wa\n"; int n_c=0;
+    obb["rel_pose_between_worlds__wb_T_wa"] = {};
     for( auto it=rel_pose_between_worlds__wb_T_wa.begin() ; it!=rel_pose_between_worlds__wb_T_wa.end() ; it++ )
     {
         auto key = it->first; //this is std::pair<m,n>
@@ -418,21 +419,27 @@ json Worlds::saveStateToDisk() const
     //---
     // vec_world_starts, vec_world_ends
     json A;
+    cout << "\tvec_world_starts: " ;
     for( int i=0 ; i<vec_world_starts.size() ; i++ )
     {
         json _a;
         _a["stampNSec"] = vec_world_starts.at(i).toNSec();
         A.push_back( _a );
+        cout << "\t" << vec_world_starts.at(i);
     }
+    cout << endl;
     cout << "[Worlds::saveStateToDisk]vec_world_starts.size=" << vec_world_starts.size() << endl;
 
     json B;
+    cout << "\tvec_world_ends: " ;
     for( int i=0 ; i<vec_world_ends.size() ; i++ )
     {
         json _b;
         _b["stampNSec"] = vec_world_ends.at(i).toNSec();
         B.push_back( _b );
+        cout << "\t" << vec_world_ends.at(i);
     }
+    cout << endl;
     cout << "[Worlds::saveStateToDisk]vec_world_ends.size=" << vec_world_ends.size() << endl;
 
     obb["vec_world_starts"] = A;
@@ -492,7 +499,8 @@ bool Worlds::loadStateFromDisk( json _objk )
     this->disjoint_set_log = x_parse_str;
     vector<string> _cmds = RawFileIO::split( x_parse_str, ';' );
     cout << "log_string = " << x_parse_str << endl;
-    cout << "For populating the disjoint set, I see " << _cmds.size() << " commands\n";
+    cout << "For populating the disjoint set, I see " << _cmds.size()-1 << " commands\n";
+    //         because last statement will be empty, ';' separated   ^^^
     for( int i =0 ; i<_cmds.size() ; i++ )
     {
         if( _cmds[i].length() < 4 ) //skip empty string

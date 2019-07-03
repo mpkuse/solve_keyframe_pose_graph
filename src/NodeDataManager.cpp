@@ -22,6 +22,7 @@ worlds_handle_raw_ptr = new Worlds();
 #define __NODEDATAMANAGER_CALLBACKS(msg) ;
 void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& msg )
 {
+    static bool static_camera_pose_callback = false;
     // ROS_INFO( "NodeDataManager::camera_pose_callback");
 
 
@@ -65,10 +66,37 @@ void NodeDataManager::camera_pose_callback( const nav_msgs::Odometry::ConstPtr& 
         node_pose.push_back( w_T_cam );
         node_pose_covariance.push_back( Cov );
 
-        // signal world0 start
+        #if 0
+        // signal world0 start - OLD CODE REMOVAL TODO
         if( node_pose.size() == 1 ) {
             worlds_handle_raw_ptr->world_starts( msg->header.stamp );
         }
+        #else
+
+        cout << TermColor::iYELLOW();
+        if( static_camera_pose_callback == false ) {
+            cout << "[NodeDataManager::camera_pose_callback] 1st pose creating at t=" << msg->header.stamp << "\n"  ;
+
+            if( node_pose.size() == 1 ) // fresh start, so signal start of world0
+            {
+                cout << "fresh start, so signal start of world0 \n";
+                worlds_handle_raw_ptr->world_starts( msg->header.stamp );
+            } else if( node_pose.size() > 1 ) // looks like you loaded from file
+            {
+                cout << "looks like you loaded from file\n";
+
+                // mark end of kidnap and start new world
+                // mark_as_unkidnapped( msg->header.stamp ); // TODO remove
+                // worlds_handle_raw_ptr->world_starts( msg->header.stamp ); // TODO remove
+                mark_as_unkidnapped_and_signal_start_of_world( msg->header.stamp );
+
+
+            }
+
+        }
+        cout << TermColor::RESET();
+        static_camera_pose_callback = true;
+        #endif
 
     }
 
@@ -807,25 +835,36 @@ const ros::Time NodeDataManager::last_kidnap_started() const
 json NodeDataManager::kidnap_data_to_json() const
 {
     std::lock_guard<std::mutex> lk(mutex_kidnap);
-    json A;
+    json obj;
+    cout << "^^^^^ NodeDataManager::kidnap_data_to_json ^^^^^\n";
+
+    // json A;
+    cout << "kidnap_starts: ";
     for( int i=0 ; i<kidnap_starts.size() ; i++ )
     {
         json _a;
         _a["stampNSec"] = kidnap_starts[i].toNSec();
-        A.push_back( _a );
+        // A.push_back( _a );
+        obj["kidnap_starts"].push_back( _a );
+        cout << "\t" << kidnap_starts[i];
     }
+    cout << endl;
 
-    json B;
+    // json B;
+    cout << "kidnap_ends: ";
     for( int i=0 ; i<kidnap_ends.size() ; i++ )
     {
         json _b;
         _b["stampNSec"] = kidnap_ends[i].toNSec();
-        B.push_back( _b );
+        // B.push_back( _b );
+        obj["kidnap_ends"].push_back( _b );
+        cout << "\t" << kidnap_ends[i];
     }
+    cout << endl;
 
-    json obj;
-    obj["kidnap_starts"] = A;
-    obj["kidnap_ends"] = B;
+    // obj["kidnap_starts"] = A;
+    // obj["kidnap_ends"] = B;
+    cout << "^^^^^ DONE NodeDataManager::kidnap_data_to_json ^^^^^\n";
     return obj;
 }
 
@@ -869,11 +908,25 @@ bool NodeDataManager::load_kidnap_data_from_json( json obj )
     kidnap_ends.clear();
     for( int i=0 ; i<n_kidnap_ends ; i++ )
     {
-        ros::Time _tmpt = ros::Time().fromNSec( obj["kidnap_starts"][i]["stampNSec"] );
+        ros::Time _tmpt = ros::Time().fromNSec( obj["kidnap_ends"][i]["stampNSec"] );
         cout << "\t" <<  _tmpt;
         kidnap_ends.push_back( _tmpt );
     }
     cout << endl;
+
+
+    cout << "n_kidnap_starts="<< n_kidnap_starts << " n_kidnap_ends=" << n_kidnap_ends << endl;
+    if( n_kidnap_starts == n_kidnap_ends ) {
+        cout << "[NodeDataManager::load_kidnap_data_from_json] Set current_kidnap_status=false\n";
+        current_kidnap_status = false;
+    }else if( n_kidnap_starts-1 == n_kidnap_ends )
+    {
+        cout << "[NodeDataManager::load_kidnap_data_from_json] Set current_kidnap_status=true\n";
+        current_kidnap_status = true;
+    } else {
+        cout << TermColor::RED() << "[NodeDataManager::load_kidnap_data_from_json] ERROR `n_kidnap_starts` and `n_kidnap_ends` need to be either of equal size of n_kidnap_ends can be 1 less than n_kidnap_starts. EXIT...\n" << TermColor::RESET();
+        exit(1);
+    }
 
     cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ DONE NodeDataManager::load_kidnap_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
     return true;
@@ -932,6 +985,7 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
 
     // I assume worlds (the disjointset) and kidnap timestamps are already populated before calling this.
     // This assumption is used in verifying the loaded worldid etc from what is there in the data
+    std::map< int, int > world_freq_counts;
     for( int i=0 ; i<n_nodes ; i++ )
     {
         int _seq =  obj.at("SolvedPoseGraph").at(i).at("seq");
@@ -939,11 +993,44 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
         int _worldID = obj.at("SolvedPoseGraph").at(i).at("worldID");
         ros::Time _tnode = ros::Time().fromNSec( obj.at("SolvedPoseGraph").at(i).at("stampNSec") );
 
-        // verify worldID and setID_of_worldID
-        
+        Matrix4d ___w_T_c;
+        bool poseloadstatus=RawFileIO::read_eigen_matrix4d_fromjson(  obj.at("SolvedPoseGraph").at(i).at("w_T_c"), ___w_T_c );
+        if( poseloadstatus == false )
+        {
+            cout << TermColor::RED() << "When loading SolvedPoseGraph[" << i << "], RawFileIO::read_eigen_matrix4d_fromjson returned false. This means, I cannot read the pose from json file\n" << TermColor::RESET() ;
+            return false;
+        }
 
+        // verify worldID and setID_of_worldID
+        #if 1
+        if( _worldID >= 0 && _setID_of_worldID>=0 ) {
+            if( this->which_world_is_this(_tnode) !=  _worldID ) {
+                cout << TermColor::RED() << "At i=" << i << " this->which_world_is_this(_tnode)=" << this->which_world_is_this(_tnode) << " but _worldID=" << _worldID << endl;
+                return false;
+            }
+
+            if( this->getWorldsConstPtr()->find_setID_of_world_i(  this->which_world_is_this(_tnode)  ) !=  _setID_of_worldID ) {
+                cout << TermColor::RED() << "At i=" << i << " this->getWorldsConstPtr()->find_setID_of_world_i(  this->which_world_is_this(_tnode)  )=" << this->getWorldsConstPtr()->find_setID_of_world_i(  this->which_world_is_this(_tnode)  ) << " but _setID_of_worldID=" << _setID_of_worldID << endl;
+                return false;
+            }
+        }
+
+        if( world_freq_counts.count( _worldID) > 0  )
+            world_freq_counts[_worldID]++;
+        else
+            world_freq_counts[_worldID] = 1;
+        #endif // verify
+
+
+        // new node creation
+        node_timestamps.push_back( _tnode );
+        node_pose.push_back( ___w_T_c );
+        Matrix<double, 6,6 > Cov = Matrix<double, 6,6 >::Zero();
+        node_pose_covariance.push_back( Cov );
     }
 
+    for( auto itu=world_freq_counts.begin() ; itu!=world_freq_counts.end() ; itu++ )
+        cout << "\t\t>>> worldid=" << itu->first << ": counts=" << itu->second << endl;
     cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ DONE NodeDataManager::load_solved_posegraph_data_from_json ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
     return true;
 }

@@ -279,6 +279,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
 
             bool publish_all = (distribution(generator) < 5)?true:false;
 
+
             for( auto it=global_jmb.begin() ; it!=global_jmb.end() ; it++ )
             {
                 // 10% of the times publish all worlds, 90% of the time publish only the newest
@@ -634,6 +635,8 @@ void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
 
 bool Composer::saveStateToDisk( string save_dir_path )
 {
+
+
     //---
     // rm -rf && mkdir
     cout << TermColor::GREEN();
@@ -643,7 +646,22 @@ bool Composer::saveStateToDisk( string save_dir_path )
     cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
     cout << TermColor::RESET();
 
-    // TODO: rm -rf save_folder_name ; mkdir save_folder_name
+
+    //---
+    // mark as kidnapped and signal end-of-world
+    cout << TermColor::iYELLOW() << "manager->curr_kidnap_status="<< manager->curr_kidnap_status() << TermColor::RESET() << ". 0:=unkidnapped  1:=kidnapped" << endl;
+    if( manager->curr_kidnap_status() == false ) { //mark as kidnapped when I am not kidnapped
+        cout << TermColor::iYELLOW() << "manager->mark_as_kidnapped_and_signal_end_of_world()\n" << TermColor::RESET() ;
+        manager->mark_as_kidnapped_and_signal_end_of_world();
+    } else {
+        cout << "I was already kidnapped when you pressed CTRL+C, so no further action taken\n";
+    }
+    cout << TermColor::iYELLOW() << "(after marking kidnapped) manager->curr_kidnap_status="<< manager->curr_kidnap_status() << TermColor::RESET() << ". 0:=unkidnapped  1:=kidnapped" << endl;
+
+
+
+    //---
+    // rm -rf save_folder_name ; mkdir save_folder_name
     string system_cmd0 = string( "rm -rf ") + save_dir_path + " && mkdir "+ save_dir_path;
     const int rm_dir_err0 = RawFileIO::exec_cmd( system_cmd0 );
     if ( rm_dir_err0 == -1 )
@@ -697,7 +715,71 @@ bool Composer::saveStateToDisk( string save_dir_path )
     obj["WorldsData"] = manager->getWorldsConstPtr()->saveStateToDisk();
 
 
+    //---
+    // Don't keep worlds unended. look at
+    //  a) WorldsData.vec_world_starts.size
+    //  b) WorldsData.vec_world_ends.size
+    //  c) KidnapTimestamps.kidnap_starts.size
+    //  d) KidnapTimestamps.kidnap_ends.size
+    //      Every world that has started need to end, every kidnap that has started has to end.
+    //      This also implies that `WorldsData.vec_world_starts.size` need to be equal to `WorldsData.vec_world_ends.size`
+    //      also `KidnapTimestamps.kidnap_ends.size` need to be equal to `KidnapTimestamps.kidnap_starts.size`
+    //           If they are not equal make them equal. by ending the world with last known timestamp of node or in case of kidnap as well.
+    // if( obj["KidnapTimestamps"]["kidnap_ends"] )
+    int __a__ = obj.at("WorldsData").at("vec_world_starts").size();
+    int __b__ = obj.at("WorldsData").at("vec_world_ends").size();
+    int __c__ = obj.at("KidnapTimestamps").at("kidnap_starts").size() ;
+    int __d__ = obj.at("KidnapTimestamps").at("kidnap_ends").size() ;
+    cout << TermColor::BLUE() << "a) WorldsData.vec_world_starts.size" << __a__ << TermColor::RESET() << endl;
+    cout << TermColor::BLUE() << "b) WorldsData.vec_world_ends.size" << __b__ << TermColor::RESET() << endl;
+    cout << TermColor::BLUE() << "c) KidnapTimestamps.kidnap_starts.size" << __c__ << TermColor::RESET() << endl;
+    cout << TermColor::BLUE() << "d) KidnapTimestamps.kidnap_ends.size" << __d__ << TermColor::RESET() << endl;
+    auto last_node_timestamp = obj.at("SolvedPoseGraph").rbegin()->at( "stampNSec"); //long int
 
+
+    //assuming CTRL+C was pressed when status was not KIDNAPED
+    // do-1: end the world
+    // do-2: start kidnap
+    // also do when you begin new bag: end kidnap and start new world from 1st item of bag
+
+
+    // assuming CTRL+C was pressed when status was KIDNAPPED
+    // dont do anything as you save data
+    //  when loading data end status kidnap and start new world
+
+
+    #if 0
+    if( __a__ == __b__ ){
+        ; // nothing to do all good
+    }
+    else if( __a__-1 == __b__ ) {
+        // TODO
+        cout << "obj[\"WorldsData\"][\"vec_world_ends\"].push_back( __ );\n";
+        json ___y;
+        ___y["stampNSec"] = last_node_timestamp;
+        obj["WorldsData"]["vec_world_ends"].push_back( ___y );
+
+    } else {
+        cout << "Either __a__ has to be equal to __b__ or __a__ has to be 1 more than b. Currently this is not the case, this looks like something is wrong\n";
+        exit(1);
+    }
+
+
+    if( __c__ == __d__ ){
+        ; // nothing to do all good
+    }
+    else if( __c__ - 1 == __d__  ) {
+        // TODO
+        cout << "obj[\"KidnapTimestamps\"][\"kidnap_ends\"].push_back( __ );\n";
+        json ___y;
+        ___y["stampNSec"] = last_node_timestamp;
+        obj["KidnapTimestamps"]["kidnap_ends"].push_back( ___y );
+
+    } else {
+        cout << "Either __c__ has to be equal to __d__ or __c__ has to be 1 more than b. Currently this is not the case, this looks like something is wrong\n";
+        exit(1);
+    }
+    #endif
 
     //---
     // Save JSON
@@ -766,7 +848,7 @@ bool Composer::loadStateFromDisk( string save_dir_path )
 
     //---
     // Adjust variables in object slam (in PoseGraphSLAM), especially the solved_until
-    
+
 
 
 

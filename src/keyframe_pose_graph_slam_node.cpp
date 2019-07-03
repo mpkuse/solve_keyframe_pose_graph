@@ -320,11 +320,11 @@ int main( int argc, char ** argv)
     //----Pose Composer---//
     Composer * cmpr = new Composer( manager, slam, viz , nh);
 
-    #define __LOAD_STATE__ 0
-    #ifdef __LOAD_STATE__
+    #define __LOAD_STATE__ 1 //set this to 1 to enable, 0 to disable
+    #if __LOAD_STATE__
     cmpr->loadStateFromDisk( "/Bulk_Data/chkpts_posegraph_solver" );
-    cout << "PREMATURE EXIT\n";
-    exit(1);
+    // cout << "PREMATURE EXIT\n";
+    // exit(1);
     #endif
 
 
@@ -422,8 +422,8 @@ int main( int argc, char ** argv)
     disjointset_monitor_pub_th.join();
 
 
-    //make this to 1 to save state to file upon exit
-    #define __SAVE_STATE__ 1
+    //make this to 1 to save state to file upon exit, 0 to disable saving to file
+    #define __SAVE_STATE__ 0
     #if __SAVE_STATE__
     cmpr->saveStateToDisk( "/Bulk_Data/chkpts_posegraph_solver" );
     #endif

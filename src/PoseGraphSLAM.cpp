@@ -1073,14 +1073,14 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 //---       to live merging trajectories and kidnap. Better to use this    ---
 //---       rather than new_optimize6DOF().
 //----------------------------------------------------------------------------
-// #define __reint_allocation_cout(msg)  msg;
-#define __reint_allocation_cout(msg)  ;
+#define __reint_allocation_cout(msg)  msg;
+// #define __reint_allocation_cout(msg)  ;
 
-// #define __reint_odom_cout(msg) msg;
-#define __reint_odom_cout(msg) ;
+#define __reint_odom_cout(msg) msg;
+// #define __reint_odom_cout(msg) ;
 
-// #define __reinit_loopedge_cout( msg ) msg;
-#define __reinit_loopedge_cout( msg ) ;
+#define __reinit_loopedge_cout( msg ) msg;
+// #define __reinit_loopedge_cout( msg ) ;
 
 
 // #define __reint_gueses_short_info(msg) msg;
