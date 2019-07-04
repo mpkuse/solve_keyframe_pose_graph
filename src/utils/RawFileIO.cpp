@@ -456,6 +456,18 @@ bool RawFileIO::read_eigen_vector_fromjson( const json str, VectorXd&  output )
 
 
 
+
+bool RawFileIO::is_path_a_directory(const char* path)
+{
+    struct stat buf;
+    stat(path, &buf);
+    return S_ISDIR(buf.st_mode);
+}
+
+bool RawFileIO::is_path_a_directory(const string path) { return is_path_a_directory(path.c_str() ); }
+
+
+
 std::vector<std::string>
 RawFileIO::split( std::string const& original, char separator )
 {

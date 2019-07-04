@@ -33,6 +33,9 @@ using json = nlohmann::json;
 
 #define __RawFileIO__write_image_debug_dm( msg ) msg;
 
+#include <sys/stat.h> // for is_directory
+
+
 class RawFileIO
 {
 public:
@@ -101,6 +104,10 @@ public:
 
     static bool if_file_exist( char * fname );
     static bool if_file_exist( string fname );
+
+    static bool is_path_a_directory(const char* path);
+    static bool is_path_a_directory(const string path);
+
     static int exec_cmd( const string& cmd ); //< Executes a unix command.
 
 

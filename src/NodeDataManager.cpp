@@ -179,7 +179,9 @@ void NodeDataManager::loopclosure_pose_callback(  const cerebro::LoopEdge::Const
         loopclosure_edges_timestamps.push_back( std::make_pair( t_a, t_b) );
     }
     else {
-        cout << TermColor::YELLOW() << "[NodeDataManager::loopclosure_pose_callback] This edge's end points cannot be found in vector of nodes. This is not FATAL, I am ignoring this edge candidate as a fix.Ideally this should not be happening.\n" << TermColor::RESET() << endl;
+        cout << TermColor::YELLOW() << "[NodeDataManager::loopclosure_pose_callback] This edge's end points( t_a=" << t_a << ", t_b=" << t_b << ") cannot be found in vector of nodes. This is not FATAL, I am ignoring this edge candidate as a fix.Ideally this should not be happening." << TermColor::RESET() << endl;
+        cout << "t_a=" << t_a << "    t_b=" << t_b << endl;
+        cout << "index_t_a=" << index_t_a << "    index_t_b=" << index_t_b << endl;
     }
 
 
@@ -1027,7 +1029,7 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
             cout << "wset_T_cam=" << PoseManipUtils::prettyprintMatrix4d( ___w_T_c ) << endl;
         }
         if( i==3 ) {
-            cout << ".\n.\n.\n";
+            cout << "\t.\n\t.\n\t.\n";
         }
 
         // For everything to be working correctly, I need to store the wTc and not wsTc

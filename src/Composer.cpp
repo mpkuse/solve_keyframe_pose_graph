@@ -124,7 +124,7 @@ void Composer::pose_assember_thread( int looprate )
                     w_TM_i = manager->getNodePose( i );
                     #if 1 // added during loadStateFromDisk implementation
                     w_TM_i_from_mgr_or_from_slam = 0;
-                    #endif 
+                    #endif
                 } else {
                     if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
                         last_idx = ____solvedUntil;}
@@ -296,9 +296,11 @@ void Composer::bf_traj_publish_thread( int looprate ) const
     static thread_local std::mt19937 generator;
     std::uniform_int_distribution<int> distribution(0,100);
 
+    int x_loop_count = 0;
     while( b_bf_traj_publish )
     {
         rate.sleep();
+        x_loop_count++;
         __Composer_bf_traj_publish_thread(
         cout <<  "[Composer::bf_traj_publish_thread] publish : global_lmb.size()=" << global_lmb.size() << "\t n_worlds aka. global_jmb.size()=" <<  global_jmb.size() << endl;
         )
@@ -313,7 +315,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
                 continue;
             }
 
-            bool publish_all = (distribution(generator) < 5)?true:false;
+            bool publish_all = (distribution(generator) < 5 || x_loop_count < 10 )?true:false;
 
 
             for( auto it=global_jmb.begin() ; it!=global_jmb.end() ; it++ )

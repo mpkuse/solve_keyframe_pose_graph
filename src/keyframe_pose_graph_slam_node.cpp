@@ -236,6 +236,51 @@ int main( int argc, char ** argv)
     ros::NodeHandle nh("~");
 
 
+    //--- loadStateFromDisk, saveStateToDisk ---//
+    string loadStateFromDisk = "";
+    if( nh.getParam( "loadStateFromDisk", loadStateFromDisk ) == true )
+    {
+        if( loadStateFromDisk.compare("") == 0 ) {
+            ROS_WARN( "[keyframe_pose_graph_slam_node] loadStateFromDisk cmdline parameter was found, but with a empty string, so I will not loadStateFromDisk()");
+        } else {
+            // now make sure it is a directory
+            if( RawFileIO::is_path_a_directory(loadStateFromDisk) ) {
+                ROS_INFO( "[keyframe_pose_graph_slam_node] loadStateFromDisk=%s, Directory exists...OK!", loadStateFromDisk.c_str() );
+                cout << TermColor::GREEN() <<  "[keyframe_pose_graph_slam_node] loadStateFromDisk=" << loadStateFromDisk << ", Directory exists...OK!" << TermColor::RESET() << endl;
+            }
+            else {
+                ROS_ERROR( "[keyframe_pose_graph_slam_node] You specified a directory for loadStateFromDisk=`%s`, This path need to exist\n...EXIT\n", loadStateFromDisk.c_str());
+                exit(1);
+            }
+        }
+    } else {
+        ROS_WARN( "[keyframe_pose_graph_slam_node] loadStateFromDisk cmdline parameter was not found, so I will not loadStateFromDisk()");
+    }
+
+    string saveStateToDisk = "";
+    if( nh.getParam( "saveStateToDisk", saveStateToDisk ) == true )
+    {
+        if( saveStateToDisk.compare("") == 0 ) {
+            ROS_WARN( "[keyframe_pose_graph_slam_node] saveStateToDisk cmdline parameter was found, but with a empty string, so I will not saveStateToDisk()");
+        } else {
+            // now make sure it is a directory
+            if( RawFileIO::is_path_a_directory(saveStateToDisk) ) {
+                ROS_INFO( "[keyframe_pose_graph_slam_node] saveStateToDisk=%s, Directory exists...OK!", saveStateToDisk.c_str() );
+                cout << TermColor::GREEN() <<  "[keyframe_pose_graph_slam_node] saveStateToDisk=" << saveStateToDisk << ", Directory exists...OK!" << TermColor::RESET() << endl;
+            }
+            else {
+                ROS_ERROR( "[keyframe_pose_graph_slam_node] You specified a directory for saveStateToDisk=`%s`, This path need to exist and be writable\n...EXIT\n", saveStateToDisk.c_str());
+                exit(1);
+            }
+        }
+    } else {
+        ROS_WARN( "[keyframe_pose_graph_slam_node] saveStateToDisk cmdline parameter was not found, so I will not saveStateToDisk()");
+    }
+
+    //--- END loadStateFromDisk, saveStateToDisk ---//
+    
+
+
     // Setup subscribers and callbacks
     NodeDataManager * manager = new NodeDataManager(nh);
 
@@ -326,6 +371,11 @@ int main( int argc, char ** argv)
     // cout << "PREMATURE EXIT\n";
     // exit(1);
     #endif
+
+    if( loadStateFromDisk.compare("") != 0 )
+    {
+        cmpr->loadStateFromDisk( loadStateFromDisk );
+    }
 
 
     // ++ start the pose assember thread - This is needed for the following publish threads
@@ -423,10 +473,15 @@ int main( int argc, char ** argv)
 
 
     //make this to 1 to save state to file upon exit, 0 to disable saving to file
-    #define __SAVE_STATE__ 1
+    #define __SAVE_STATE__ 0
     #if __SAVE_STATE__
     cmpr->saveStateToDisk( "/Bulk_Data/chkpts_posegraph_solver" );
     #endif
+
+    if( saveStateToDisk.compare("") != 0 )
+    {
+        cmpr->saveStateToDisk( saveStateToDisk );
+    }
 
     #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__
