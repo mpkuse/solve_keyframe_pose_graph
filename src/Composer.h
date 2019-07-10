@@ -35,6 +35,8 @@ using namespace std;
 using json = nlohmann::json;
 #include "utils/RawFileIO.h"
 
+#include <nav_msgs/Path.h>
+
 class Composer
 {
 public:
@@ -107,6 +109,9 @@ private:
     //  makes use of global_jmb and publish last cam
 public:
     void cam_visual_publish_thread( int looprate = 30 ) const;
+    //    vvvv I am publishing just as it is, this might need work when having multiple co-ordinate systems
+    void path_publish_thread( int looprate=30 );
+    void w0_T_w1_publish_thread( int looprate=3 ); //if world exists(0,1) will publish else nothing
     void cam_visual_publish_enable() { b_cam_visual_publish = true;}
     void cam_visual_publish_disable() {b_cam_visual_publish = false; }
 
@@ -153,6 +158,8 @@ public:
 
 private:
     ros::Publisher pub_hz200_marker;
+    ros::Publisher pub_hz200_pose, pub_hz200_posestamped;
+
 
 
     /////////////// Save State ////////////////////

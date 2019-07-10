@@ -1032,7 +1032,8 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
             cout << "\t.\n\t.\n\t.\n";
         }
 
-        // For everything to be working correctly, I need to store the wTc and not wsTc
+        // For everything to be working correctly, I need to store (in NodeDataManager)
+        //     the wTc and not wsTc
         // w_T_c := w_T_ws * ws_T_c
         if( _worldID >= 0 && _worldID != _setID_of_worldID )
         {
@@ -1047,6 +1048,11 @@ bool NodeDataManager::load_solved_posegraph_data_from_json( json obj )
             }
             Matrix4d f_wTc = wTws * ___w_T_c;
             ___w_T_c = f_wTc;
+        } else if( _worldID < 0 && _worldID != _setID_of_worldID )
+        {
+                // TODO: the kidnapped sections need to be shifted from setID_of_worldID of their world's to worldIDs of their worlds
+                //         Also note, the worlds of kidnap will be -worldid +1. For example, for worldID=-1 the worldid is actually 0, ie. -1 is adjacent to the world0.
+
         }
 
 

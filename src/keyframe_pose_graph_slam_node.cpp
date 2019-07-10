@@ -278,7 +278,7 @@ int main( int argc, char ** argv)
     }
 
     //--- END loadStateFromDisk, saveStateToDisk ---//
-    
+
 
 
     // Setup subscribers and callbacks
@@ -395,6 +395,25 @@ int main( int argc, char ** argv)
     // cmpr->cam_visual_publish_disable();
     std::thread cam_visual_pub_th( &Composer::cam_visual_publish_thread, cmpr, 30 );
 
+    #define __main__adhoc__
+    #ifdef __main__adhoc__ //adhoc
+    string __tmp_adhoc_pubpath="", __tmp_adhoc_pubw0_T_w1="";
+    bool   adhoc_pubpath=false, adhoc_pubw0_T_w1=false;
+    std::thread path_pub_th, w0_T_w1_pub_th;
+
+    if( nh.getParam( "adhoc_pubpath", __tmp_adhoc_pubpath ) == true )
+        adhoc_pubpath=true;
+
+    if( nh.getParam( "adhoc_pubw0_T_w1", __tmp_adhoc_pubw0_T_w1 ) == true )
+        adhoc_pubw0_T_w1 = true;
+
+    if( adhoc_pubpath )
+        path_pub_th = std::thread{ &Composer::path_publish_thread, cmpr, 30 };
+
+    if( adhoc_pubw0_T_w1 )
+        w0_T_w1_pub_th = std::thread{ &Composer::w0_T_w1_publish_thread, cmpr, 3 };
+    #endif //adhoc
+
     // ++ loop edge publish thread
     cmpr->loopedge_publish_enable();
     // cmpr->loopedge_publish_disable();
@@ -470,6 +489,13 @@ int main( int argc, char ** argv)
     cam_visual_pub_th.join();
     loopedge_pub_th.join();
     disjointset_monitor_pub_th.join();
+
+    #ifdef __main__adhoc__
+    if( adhoc_pubpath )
+        path_pub_th.join();
+    if( adhoc_pubw0_T_w1 )
+        w0_T_w1_pub_th.join();
+    #endif
 
 
     //make this to 1 to save state to file upon exit, 0 to disable saving to file

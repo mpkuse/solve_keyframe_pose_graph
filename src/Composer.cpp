@@ -436,6 +436,133 @@ void Composer::cam_visual_publish_thread( int looprate ) const
     cout << TermColor::RED() << "Finished `Composer::cam_visual_publish_thread`\n" << TermColor::RESET() << endl;
 }
 
+// #define __Composer__path_publish_thread__(msg) msg;
+#define __Composer__path_publish_thread__(msg) ;
+void Composer::path_publish_thread( int looprate )
+{
+    cout << TermColor::GREEN() << "start `Composer::path_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
+    cout << "[Composer::path_publish_thread]will use `b_cam_visual_publish` for terminating this thread\n";
+    assert( looprate > 0 && looprate < 50 );
+
+    int n, prev_n = 0;
+    nav_msgs::Path path_msg;
+
+    string path_topic = string( "adhoc/xpath" );
+    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", path_topic.c_str() );
+    pub_hz200_marker = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
+
+    ros::Publisher pub___path = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
+
+    ros::Rate rate(looprate);
+    while( b_cam_visual_publish )
+    {
+        rate.sleep();
+
+        {
+            __Composer__path_publish_thread__( "---\n");
+            std::lock_guard<std::mutex> lk(mx);
+            if(  global_latest_pose_worldid < 0 ) {
+                __Composer__path_publish_thread__( cout << "global_latest_pose_worldid is negative, so, continue...\n"; )
+                continue;
+            }
+
+            n = global_lmb.size();
+            if( prev_n == n || n == 0 ) {
+                __Composer__path_publish_thread__(
+                cout << "[Composer::path_publish_thread] nothing new, n same as prev_n=" << n << "\n";
+                )
+                continue;
+            }
+            Matrix4d wi_T_latest = global_lmb.at( n-1 );
+
+            if( rand()%100 > 2 ) {
+                //add to msg
+                ros::Time stamp_of_it = manager->getNodeTimestamp( n-1 );
+                path_msg.header.stamp = stamp_of_it;
+                path_msg.header.frame_id = "world";
+                geometry_msgs::PoseStamped pxl;
+                pxl.header.stamp = stamp_of_it;
+                PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wi_T_latest, pxl.pose );
+                path_msg.poses.push_back( pxl );
+                __Composer__path_publish_thread__(
+                cout << "[Composer::path_publish_thread]push_back " << stamp_of_it<< endl;
+                )
+            }
+            else {
+                // reset and set all again
+                __Composer__path_publish_thread__(
+                    cout << TermColor::iRED() << "[Composer::path_publish_thread]reset and then for h=[0:" << n << ")" <<  TermColor::RESET() << endl;
+                )
+                path_msg.poses.clear();
+                for( int h=0 ; h<n ; h++ )
+                {
+                    ros::Time stamp_of_it = manager->getNodeTimestamp( h );
+                    path_msg.header.stamp = stamp_of_it;
+                    path_msg.header.frame_id = "world";
+                    geometry_msgs::PoseStamped pxl;
+                    pxl.header.stamp = stamp_of_it;
+                    auto ___wi_T_c = global_lmb.at( h );
+                    PoseManipUtils::eigenmat_to_geometry_msgs_Pose( ___wi_T_c, pxl.pose );
+                    path_msg.poses.push_back( pxl );
+                }
+            }
+        }
+
+        prev_n = n;
+        __Composer__path_publish_thread__( cout << "[Composer::path_publish_thread]publish path, contains: " <<  path_msg.poses.size() << " poses\n"; )
+        pub___path.publish( path_msg );
+
+
+    }
+    cout << TermColor::RED() << "Finished `Composer::path_publish_thread`\n" << TermColor::RESET() << endl;
+}
+
+#define  __Composer__w0_T_w1_publish_thread( msg ) msg;
+// #define  __Composer__w0_T_w1_publish_thread( msg ) ;
+void Composer::w0_T_w1_publish_thread( int looprate )
+{
+    cout << TermColor::GREEN() << "start `Composer::w0_T_w1_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
+    assert( looprate > 0 && looprate < 5 );
+
+    string w0_T_w1_topic = string( "adhoc/w0_T_w1");
+    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", w0_T_w1_topic.c_str() );
+    ros::Publisher pub_w0_T_w1 = nh.advertise<geometry_msgs::PoseStamped>( w0_T_w1_topic , 1000 );
+
+
+    ros::Rate rate(looprate);
+    while( b_cam_visual_publish )
+    {
+        rate.sleep();
+
+        __Composer__w0_T_w1_publish_thread( cout << "----w0_T_w1_publish_thread---\n"; )
+
+
+        // w0_T_w1 if available
+        if( manager->getWorldsConstPtr()->is_exist( 0, 1 ) )
+        {
+            // publish.
+            __Composer__w0_T_w1_publish_thread( cout << "[Composer::w0_T_w1_publish_thread]w0_T_w1 exist...pubnlish/....\n"; )
+            Matrix4d w0_T_w1 = manager->getWorldsConstPtr()->getPoseBetweenWorlds( 0, 1);
+            __Composer__w0_T_w1_publish_thread( cout << "w0_T_w1=" << PoseManipUtils::prettyprintMatrix4d( w0_T_w1 ) << endl; )
+
+
+            geometry_msgs::PoseStamped msg;
+            PoseManipUtils::eigenmat_to_geometry_msgs_Pose( w0_T_w1, msg.pose );
+            msg.header.stamp = ros::Time();
+            msg.header.frame_id = "w0_T_w1";
+
+            pub_w0_T_w1.publish( msg );
+        }
+        else {
+            __Composer__w0_T_w1_publish_thread( cout << "[Composer::w0_T_w1_publish_thread]w0_T_w1 doesnt exist, so dont publish anything\n"; )
+        }
+
+
+    }
+
+    cout << TermColor::RED() << "Finished `Composer::w0_T_w1_publish_thread`\n" << TermColor::RESET() << endl;
+
+}
 
 
 // #define __Composer__loopedge_publish_thread(msg) msg;
@@ -583,8 +710,20 @@ void Composer::setup_200hz_publishers()
     pub_hz200_marker = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
 
 
-    // puby =
-    // cmpr->set_200hz_odom_pub( puby )
+    // geometry_msgs::Pose
+    string pose_topic = string( "hz200/pose");
+    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", pose_topic.c_str() );
+    pub_hz200_pose = nh.advertise<geometry_msgs::Pose>( pose_topic , 1000 );
+
+    // geometry_msgs::PoseStamped
+    string posestamped_topic = string( "hz200/posestamped");
+    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", posestamped_topic.c_str() );
+    pub_hz200_posestamped = nh.advertise<geometry_msgs::PoseStamped>( posestamped_topic , 1000 );
+
+
+    // path
+
+
 }
 
 
@@ -640,25 +779,48 @@ void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
     Matrix4d wf_T_imucurr = ( wf_T_camlast * imu_T_cam.inverse() ) * imulast_T_imucurr;
 
 
+    //==============================================================//
+    //--------------------done computation....now publixh-----------//
+    //==============================================================//
+    bool publish_marker = true;
+    bool publish_txt_marker = false;
+
 
     //
     // Make viz marker and publish
-    visualization_msgs::Marker imu_m;
-    RosMarkerUtils::init_XYZ_axis_marker( imu_m, 1.0 );
-    imu_m.ns = "hz100_imu";
-    imu_m.id = 0;
-    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_m  );
-    pub_hz200_marker.publish( imu_m );
+    if( publish_marker ) {
+        visualization_msgs::Marker imu_m;
+        RosMarkerUtils::init_XYZ_axis_marker( imu_m, 1.0 );
+        imu_m.ns = "hz100_imu";
+        imu_m.id = 0;
+        RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_m  );
+        pub_hz200_marker.publish( imu_m );
+    }
 
-    visualization_msgs::Marker imu_txt;
-    RosMarkerUtils::init_text_marker( imu_txt );
-    imu_txt.ns = "hz100_imu_txt";
-    imu_txt.text = "IMU@200hz";
-    imu_txt.scale.z = 0.5;
-    RosMarkerUtils::setcolor_to_marker( 1.0, 1.0, 1.0, imu_txt );
-    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_txt  );
-    pub_hz200_marker.publish( imu_txt );
+    if( publish_txt_marker ) {
+        visualization_msgs::Marker imu_txt;
+        RosMarkerUtils::init_text_marker( imu_txt );
+        imu_txt.ns = "hz100_imu_txt";
+        imu_txt.text = "IMU@200hz";
+        imu_txt.scale.z = 0.5;
+        RosMarkerUtils::setcolor_to_marker( 1.0, 1.0, 1.0, imu_txt );
+        RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_txt  );
+        pub_hz200_marker.publish( imu_txt );
+    }
 
+
+    geometry_msgs::Pose posex;
+    PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wf_T_imucurr, posex );
+
+    geometry_msgs::PoseStamped posexstamped;
+    posexstamped.header.stamp = msg->header.stamp;
+    int _worldID = manager->which_world_is_this( cam_t );
+    int _setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( _worldID );
+    posexstamped.header.frame_id = "pose_in_world#" + std::to_string( _setID_of_worldID );
+    posexstamped.pose = posex;
+
+    pub_hz200_pose.publish( posex );
+    pub_hz200_posestamped.publish( posexstamped );
 
 
 
@@ -886,8 +1048,14 @@ bool Composer::loadStateFromDisk( string save_dir_path )
 
     //---
     // Adjust variables in object slam (in PoseGraphSLAM), especially the solved_until
+    bool status_slamsolver = slam->load_state(  ); //< this will build up a constant pose graph until this point.
+    if( status_slamsolver == false )
+    {
+        cout << TermColor::RED() << "[Composer::loadStateFromDisk]slam->load_state(  ); returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
+        exit(1);
+    }
 
 
-
+    return true;
 
 }

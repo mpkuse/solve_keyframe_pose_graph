@@ -21,11 +21,153 @@ PoseGraphSLAM::PoseGraphSLAM( NodeDataManager* _manager ): manager( _manager )
     this->_opt_t_ = new double [3*30000];
     this->_opt_len_ = 0;
 
-    this->_opt_switch_ = new double [5000]; //1 per loop edge
+    this->_opt_switch_ = new double [30000]; //1 per loop edge
     _opt_switch_len_ = 0;
 
 }
 
+// NOTE:
+//      As I load all the data from manager (when loading from disk),
+//      I set all the optimization variables as constant. It might be a good choice
+//      if you want me to assume the underlying loaded graph is final and don't change that.
+//      AKA pure localization phase. However, you are incrementally still building a
+//      map with data loading from file, please set  optimization_variable_as_constants=false
+//      Overall, please be alert of this function to avoid bugs.
+//
+//      If you want the loaded poses to be still optimized, you are better off
+//      not calling this function and hope that the solver thread reinit_ceres_problem_onnewloopedge_optimize6DOF()
+//      takes care of everything.
+bool PoseGraphSLAM::load_state()
+{
+    //--
+    // Setting
+    bool optimization_variable_as_constants = true;
+    //--
+    // DONE Setting
+
+    cout << TermColor::GREEN() << "\n^^^^^^^^^^^^^^ PoseGraphSLAM::load_state ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+
+    cout << "In the NodeDataManager, I see " << manager->getNodeLen() << " nodes"<< endl;
+    cout << "WorldInfo: \n";
+    manager->print_worlds_info( 0 );
+
+    if( manager->getNodeLen() == 0 )
+    {
+        cout << TermColor::RED() << "nodes in manager was zero, which means a fresh start (not load from disk), however you still seem to call PoseGraphSLAM::load_state(), this is most likely a buy and an impossible event.\n";
+        exit(1);
+    }
+
+    if( optimization_variable_as_constants == false ) {
+        cout << TermColor::YELLOW() << "[PoseGraphSLAM::load_state] WARN since optimization_variable_as_constants was false, no need to do anything here as this case is taken care of by the solver thread. If unsure you would better read the code here...\n";
+        return true;
+    }
+
+
+    //======
+    //---- a) create optimization variables
+    // also do
+    //---- c) mark all these variables to constant
+    //======
+    ceres::LocalParameterization * eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
+    ceres::LocalParameterization * qin_angle_local_paramterization = AngleLocalParameterization::Create();
+
+
+    int org_n_opt_variables = n_opt_variables();
+    cout << "[PoseGraphSLAM::load_state] for yp=" << org_n_opt_variables << "  to  " << manager->getNodeLen() << endl;
+    for( int yp=org_n_opt_variables ; yp< manager->getNodeLen()  ; yp++ ) {
+
+        int _worldID = manager->which_world_is_this( manager->getNodeTimestamp(yp) );
+        int _setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( _worldID );
+
+        Matrix4d w_T_c = manager->getNodePose(yp); //pose in its own world
+        bool print_iter = (yp==org_n_opt_variables || yp==org_n_opt_variables+1 || yp==org_n_opt_variables+2 || yp== manager->getNodeLen()-1 || yp== manager->getNodeLen()-2  )?true:false;
+        if( yp==org_n_opt_variables+2 )
+            cout << ".\n.\n.\n";
+
+        if( print_iter ) {
+        cout << "\typ=" << yp << "\tworldID=" << _worldID << "\tsetID_of_worldID="  << _setID_of_worldID ;
+        cout << "\twTc=" << PoseManipUtils::prettyprintMatrix4d( w_T_c );
+        cout << endl;
+        }
+
+        Matrix4d ws_T_w = Matrix4d::Identity(); //relative pose between the worlds
+        bool ws_T_w_used = false;
+        if( _worldID >= 0 && _worldID != _setID_of_worldID )
+        {
+            if( manager->getWorldsConstPtr()->is_exist(_setID_of_worldID, _worldID) ) {
+                ws_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds( _setID_of_worldID, _worldID );
+                ws_T_w_used = true;
+            }
+            else {
+                cout << "[PoseGraphSLAM::load_state] ERROR";
+                cout << "at yp="<< yp << "you requesting a pose between the worlds "<<  _worldID << " and " << _setID_of_worldID << " that does not exist. This cannot be happening\n";
+                manager->getWorldsConstPtr()->print_summary();
+                exit(1);
+            }
+        }
+        Matrix4d ws_T_c;  //pose in the setID_of_worldID
+        ws_T_c = ws_T_w * w_T_c;
+
+        if( print_iter ) {
+        if( ws_T_w_used ) {
+            cout << TermColor::BLUE() ;
+        }
+        cout << "\tallocate_and_append_new_opt_variable_withpose=" << PoseManipUtils::prettyprintMatrix4d(ws_T_c) << endl;
+        cout << TermColor::RESET();
+        }
+
+        allocate_and_append_new_opt_variable_withpose( ws_T_c );
+
+
+        if( print_iter ) {
+        cout << "\tAddParameterBlock , SetParameterBlockConstant\n";
+        }
+
+        #if 1
+        // [IMPORTANT] : remeber to specify (to ceres) the parameter blocks and their parameterization.
+        #ifdef __USE_YPR_REP
+        reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_ypr(yp), 1 );
+        reint_problem.SetParameterization( get_raw_ptr_to_opt_variable_ypr(yp),  qin_angle_local_paramterization );
+        reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(yp), 3 );
+
+        if( optimization_variable_as_constants ) {
+            reint_problem.SetParameterBlockConstant(get_raw_ptr_to_opt_variable_ypr(yp));
+            reint_problem.SetParameterBlockConstant( get_raw_ptr_to_opt_variable_t(yp), 3 );
+        }
+        #else
+        reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_q(yp), 4 );
+        reint_problem.SetParameterization( get_raw_ptr_to_opt_variable_q(yp),  eigenquaternion_parameterization );
+        reint_problem.AddParameterBlock( get_raw_ptr_to_opt_variable_t(yp), 3 );
+
+        if( optimization_variable_as_constants ) {
+            reint_problem.SetParameterBlockConstant( get_raw_ptr_to_opt_variable_q(yp) );
+            reint_problem.SetParameterBlockConstant( get_raw_ptr_to_opt_variable_t(yp) );
+        }
+        #endif //__USE_YPR_REP
+        #endif //1 or 0
+
+
+
+    }
+
+    //-------
+    //---- b) setup odometry edges. Is this really needed???
+    //-------
+    //??
+
+
+    //========
+    //---- d) appropriately set the solvedUntil variable
+    //========
+    cout << TermColor::iGREEN() << "solved_until:= " <<  manager->getNodeLen() - 1 << TermColor::RESET() << endl;
+    solved_until = manager->getNodeLen() - 1;
+
+    cout << TermColor::GREEN() << "\n^^^^^^^^^^^^^^ DONE PoseGraphSLAM::load_state ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
+
+    // cout << "Return false, just for fun...\n";
+    // return false;
+    return true;
+}
 
 //################################################################################
 //############## Public Interfaces to retrive optimized poses ####################
@@ -243,7 +385,7 @@ void PoseGraphSLAM::deallocate_optimization_variables()
 
 
 //-------------------------------------------------------------------------------------
-
+#ifdef __new_optimize6DOF__
 void PoseGraphSLAM::init_ceres_optimization_problem()
 {
     cout << "[PoseGraphSLAM::init_ceres_optimization_problem]\n";
@@ -260,7 +402,7 @@ void PoseGraphSLAM::init_ceres_optimization_problem()
     robust_norm = new ceres::HuberLoss(0.1);
 
 }
-
+#endif
 
 #ifdef __new_optimize6DOF__
 // #define __PoseGraphSLAM_new_optimize6DOF_odom_debug( msg ) msg;
@@ -1073,18 +1215,18 @@ bool PoseGraphSLAM::saveAsJSON(const string base_path)
 //---       to live merging trajectories and kidnap. Better to use this    ---
 //---       rather than new_optimize6DOF().
 //----------------------------------------------------------------------------
-#define __reint_allocation_cout(msg)  msg;
-// #define __reint_allocation_cout(msg)  ;
+// #define __reint_allocation_cout(msg)  msg;
+#define __reint_allocation_cout(msg)  ;
 
-#define __reint_odom_cout(msg) msg;
-// #define __reint_odom_cout(msg) ;
+// #define __reint_odom_cout(msg) msg;
+#define __reint_odom_cout(msg) ;
 
-#define __reinit_loopedge_cout( msg ) msg;
-// #define __reinit_loopedge_cout( msg ) ;
+// #define __reinit_loopedge_cout( msg ) msg;
+#define __reinit_loopedge_cout( msg ) ;
 
 
-// #define __reint_gueses_short_info(msg) msg;
-#define __reint_gueses_short_info(msg) ;
+#define __reint_gueses_short_info(msg) msg;
+// #define __reint_gueses_short_info(msg) ;
 
 
 // Print info on node regularization. I use node regularization to set
@@ -1122,18 +1264,20 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
     //-----------------------
     //-0- INIT CERES Problem
     //-----------------------
-    ceres::Problem reint_problem;
+    // ceres::Problem reint_problem; //< now defined as global, this was done, because function `load_state()` need to set old params
     ceres::Solver::Options reint_options;
     ceres::Solver::Summary reint_summary;
     reint_options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     reint_options.minimizer_progress_to_stdout = false;
     reint_options.max_num_iterations = 10;
     // reint_options.enable_fast_removal = true;
-    eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
-    qin_angle_local_paramterization = AngleLocalParameterization::Create();
+
+
+    ceres::LocalParameterization * eigenquaternion_parameterization = new ceres::EigenQuaternionParameterization;
+    ceres::LocalParameterization * qin_angle_local_paramterization = AngleLocalParameterization::Create();
 
     // robust_norm = new ceres::CauchyLoss(1.0);
-    robust_norm = new ceres::HuberLoss(0.1);
+    ceres::LossFunction * robust_norm = new ceres::HuberLoss(0.1);
 
     //==> key:= worldID, value:= (prev setID of this world, new setID of this world).
     std::map< int , std::tuple<int,int> > changes_to_setid_on_set_union;
@@ -1549,10 +1693,11 @@ void PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF()
             if( u<=____solvedUntil )
                 _before_solveduntil = true;
 
-            if( changes_to_setid_on_set_union.count(world_of_u) > 0 ) {
+            if( changes_to_setid_on_set_union.count(world_of_u) > 0 )
+            {
                 _in_change_set = true;
-            __reint_gueses_short_info( cout << (_in_change_set?"T":"F") << (_before_solveduntil?"T":"F") << "."; )
             }
+            __reint_gueses_short_info( cout << (_in_change_set?"T":"F") << (_before_solveduntil?"T":"F") << "."; )
 
 
 

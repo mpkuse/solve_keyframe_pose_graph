@@ -83,6 +83,16 @@ public:
     void reinit_ceres_problem_onnewloopedge_optimize6DOF_disable() { reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled=false; }
     int get_reinit_ceres_problem_onnewloopedge_optimize6DOF_status() { return reinit_ceres_problem_onnewloopedge_optimize6DOF_status; }
 
+
+    // This will look at the manager and see how many nodes exists.
+    // For the already existing nodes will
+    //     a) create optimization variables
+    //     b) setup odometry edges (needed when setting optimization_variable_as_constants=false )
+    //     c) mark all these variables to constant (only when optimization_variable_as_constants=true)
+    //     d) appropriately set the solvedUntil variable
+    // This function is called by Composer::loadStateFromDisk() when I try to load data from disk.
+    bool load_state();
+
 private:
     // private stuff for thread `reinit_ceres_problem_onnewloopedge_optimize6DOF`.
     atomic<bool> reinit_ceres_problem_onnewloopedge_optimize6DOF_isEnabled;
@@ -130,8 +140,10 @@ private:
     // #define __USE_YPR_REP
     // ^^^^^ comment this out to use the default quaternion representation.
     //      This has some issues, more work needed to correctly get this working.
-    //      The 4DOF should be wrt to imu poses and not camera poses.
-    //      For now pitch_and_roll regularized 6DOF is alright. 
+    //      The 4DOF should be wrt to imu poses and not camera poses. This is not
+    //      implemented. currently I am doing pose graph solving on camera poses,
+    //      better do it on imu poses. when this option is enabled.
+    //      For now pitch_and_roll regularized 6DOF is alright.
 
     mutable std::mutex  mutex_opt_vars;
 
@@ -173,14 +185,19 @@ private:
 
 
 
+    #ifdef __new_optimize6DOF__
     // The optimization problem - CERES
     ceres::Problem problem;
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
+
+    void init_ceres_optimization_problem();
+    #endif
+
+    ceres::Problem reint_problem;
     ceres::LocalParameterization * eigenquaternion_parameterization=NULL;
     ceres::LocalParameterization * qin_angle_local_paramterization = NULL;
     ceres::LossFunction * robust_norm = NULL;
-    void init_ceres_optimization_problem();
 
 
     // List of residues - These are populated when when you add a residue term

@@ -181,6 +181,9 @@ bool Worlds::is_exist( int m, int n ) const
     if( m==n )
         return true;
 
+    if( m >= n_worlds() || n >= n_worlds() )
+        return false;
+
     {
     std::lock_guard<std::mutex> lk(mutex_world);
     int setid_of_m = disjoint_set.find_set( m ); //find_setID_of_world_i(m);
