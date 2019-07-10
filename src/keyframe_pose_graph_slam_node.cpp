@@ -402,10 +402,25 @@ int main( int argc, char ** argv)
     std::thread path_pub_th, w0_T_w1_pub_th;
 
     if( nh.getParam( "adhoc_pubpath", __tmp_adhoc_pubpath ) == true )
-        adhoc_pubpath=true;
+    {
+        cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath`\n";
+        if( __tmp_adhoc_pubpath.compare("true") == 0 ) {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is true, so will publish path\n";
+            adhoc_pubpath=true;
+        }else {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is NOT true, so wont publish path\n";
+        }
+    }
 
     if( nh.getParam( "adhoc_pubw0_T_w1", __tmp_adhoc_pubw0_T_w1 ) == true )
-        adhoc_pubw0_T_w1 = true;
+    {
+        if( __tmp_adhoc_pubw0_T_w1.compare("true") == 0 ) {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is true, so will publish w0_T_w1\n";
+            adhoc_pubw0_T_w1 = true;
+        }else {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is NOT true, so will not publish w0_T_w1\n";
+        }
+    }
 
     if( adhoc_pubpath )
         path_pub_th = std::thread{ &Composer::path_publish_thread, cmpr, 30 };
