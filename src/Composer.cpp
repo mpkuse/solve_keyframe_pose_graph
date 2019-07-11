@@ -473,7 +473,9 @@ void Composer::path_publish_thread( int looprate )
                 )
                 continue;
             }
-            Matrix4d wi_T_latest = global_lmb.at( n-1 );
+
+            Matrix4d imu_T_cam = manager->get_imu_T_cam();
+            Matrix4d wi_T_latest =  global_lmb.at( n-1 ) * imu_T_cam.inverse();
 
             if( rand()%100 > 2 ) {
                 //add to msg
@@ -501,7 +503,7 @@ void Composer::path_publish_thread( int looprate )
                     path_msg.header.frame_id = "world";
                     geometry_msgs::PoseStamped pxl;
                     pxl.header.stamp = stamp_of_it;
-                    auto ___wi_T_c = global_lmb.at( h );
+                    auto ___wi_T_c = global_lmb.at( h ) * imu_T_cam.inverse();
                     PoseManipUtils::eigenmat_to_geometry_msgs_Pose( ___wi_T_c, pxl.pose );
                     path_msg.poses.push_back( pxl );
                 }
