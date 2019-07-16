@@ -283,7 +283,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
 {
     //--- Options
     const int options_line_color_style = 10; // should be either 10 or 12. 10:color by WorldID; 12:  //color by world setID
-    const float options_linewidth_multiplier  = 3; // thickness of the line
+    const float options_linewidth_multiplier  = 1; // thickness of the line
 
     //---
 
@@ -396,7 +396,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
 void Composer::cam_visual_publish_thread( int looprate ) const
 {
     //--- Options
-    const int options_linewidth_multiplier = 3; //default 3
+    const int options_linewidth_multiplier = 1; //default 3
     //---
 
 
@@ -448,7 +448,7 @@ void Composer::path_publish_thread( int looprate )
     nav_msgs::Path path_msg;
 
     string path_topic = string( "adhoc/xpath" );
-    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", path_topic.c_str() );
+    ROS_INFO( "[Composer::path_publish_thread] Publish to %s", path_topic.c_str() );
     pub_hz200_marker = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
 
     ros::Publisher pub___path = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
@@ -518,6 +518,83 @@ void Composer::path_publish_thread( int looprate )
     }
     cout << TermColor::RED() << "Finished `Composer::path_publish_thread`\n" << TermColor::RESET() << endl;
 }
+
+
+// #define __Composer__detailed_path_publish_thread__(msg) msg;
+#define __Composer__detailed_path_publish_thread__(msg) ;
+void Composer::detailed_path_publish_thread( int looprate=30 )
+{
+    cout << TermColor::GREEN() << "start `Composer::detailed_path_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
+    cout << "[Composer::detailed_path_publish_thread]will use `b_cam_visual_publish` for terminating this thread\n";
+    assert( looprate > 0 && looprate < 50 );
+
+
+    int n, prev_n = 0;
+    nav_msgs::Path path_msg;
+
+    string path_topic = string( "adhoc/xpath_detailed" );
+    ROS_INFO( "[Composer::detailed_path_publish_thread] Publish to %s", path_topic.c_str() );
+    ros::Publisher pub___path = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
+
+    ros::Rate rate(looprate);
+    Matrix4d imu_T_cam = Matrix4d::Identity(); bool flag_imu_T_cam = false;
+
+    while( b_cam_visual_publish )
+    {
+        rate.sleep();
+        {
+            std::lock_guard<std::mutex> lk(mx);
+
+            nav_msgs::Path path_msg;
+            path_msg.poses.clear();
+            __Composer__detailed_path_publish_thread__( cout << "---\n"; )
+            for( int i=0 ; i<global_lmb.size() ; i++ )
+            {
+                if( flag_imu_T_cam == false)
+                {
+                    imu_T_cam = manager->get_imu_T_cam();
+                    flag_imu_T_cam = true;
+                }
+
+                if( flag_imu_T_cam == false ) {
+                    cout << "FATAIL.....This cannot be happening.....\n";
+                    exit(1);
+                }
+                Matrix4d wTc = global_lmb[i]; // this is pose of camera in the co-ordinate system of  setID_of_worldID
+                Matrix4d w_T_imu = wTc * imu_T_cam.inverse();
+
+
+                ros::Time stamp = manager->getNodeTimestamp(i);
+                int worldID = manager->which_world_is_this( stamp );
+
+
+                if( worldID < 0 )
+                    continue;
+                int setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( worldID );
+
+                __Composer__detailed_path_publish_thread__(
+                cout << "[Composer::detailed_path_publish_thread]worldID:" << worldID << "\tsetID_of_worldID:" << setID_of_worldID << "\t" << PoseManipUtils::prettyprintMatrix4d(wTc) << endl;
+                );
+
+                geometry_msgs::PoseStamped pose_i;
+                pose_i.header.stamp = stamp;
+                pose_i.header.frame_id = "worldID:" + to_string( worldID )+":"+"setID_of_worldID:"+to_string(setID_of_worldID);
+
+                // PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wTc, pose_i.pose );
+                PoseManipUtils::eigenmat_to_geometry_msgs_Pose( w_T_imu, pose_i.pose );
+
+
+                path_msg.poses.push_back( pose_i );
+            }
+            __Composer__detailed_path_publish_thread__(
+            cout << "[Composer::detailed_path_publish_thread]PUBLISH....path_msg.poses.size=" << path_msg.poses.size() << endl;
+            )
+            pub___path.publish( path_msg );
+        }
+    }
+
+}
+
 
 #define  __Composer__w0_T_w1_publish_thread( msg ) msg;
 // #define  __Composer__w0_T_w1_publish_thread( msg ) ;
@@ -698,8 +775,45 @@ void Composer::disjointset_statusimage_publish_thread( int looprate ) const
     cout << TermColor::RED() << "Finished `Composer::disjointset_statusimage_publish_thread`\n" << TermColor::RESET() << endl;
 }
 
+void Composer::disjointset_statusjson_publish_thread( int looprate )
+{
+    cout << TermColor::GREEN() << "start `Composer::disjointset_statusjson_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
+    assert( looprate > 0 && looprate < 50 );
+
+    string jsonstring_topic = string( "adhoc/disjoint_set_status_jsonstring" );
+    ROS_INFO( "[Composer::disjointset_statusjson_publish_thread] Publish to %s", jsonstring_topic.c_str() );
+    ros::Publisher pub_jsonstring = nh.advertise<std_msgs::String>( jsonstring_topic , 1000 );
 
 
+
+
+    ros::Rate rate(looprate);
+    string prev_status_str = "";
+    while( b_disjointset_statusimage_publish )
+    {
+        rate.sleep();
+
+        string curr_status_str = manager->getWorldsConstPtr()->disjoint_set_status_json().dump(4);
+        if( prev_status_str.compare(curr_status_str) == 0 ) {
+            // same as old, no point publishing
+            __Composer__disjointset_statusimage_publish_thread(
+            cout << "[Composer::disjointset_statusjson_publish_thread] No change in status, so dont publish image." << endl;
+            )
+            continue;
+        }
+
+        // publish only when changed, modify as need be.
+        std_msgs::String msg;
+        msg.data = curr_status_str;
+        pub_jsonstring.publish( msg );
+
+
+
+        prev_status_str = curr_status_str;
+    }
+
+    cout << TermColor::RED() << "Finished `Composer::disjointset_statusjson_publish_thread`\n" << TermColor::RESET() << endl;
+}
 
 //------ Publish body pose @200Hz ------//
 

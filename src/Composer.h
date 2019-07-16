@@ -36,6 +36,7 @@ using json = nlohmann::json;
 #include "utils/RawFileIO.h"
 
 #include <nav_msgs/Path.h>
+#include <std_msgs/String.h>
 
 class Composer
 {
@@ -111,6 +112,7 @@ public:
     void cam_visual_publish_thread( int looprate = 30 ) const;
     //    vvvv I am publishing just as it is, this might need work when having multiple co-ordinate systems
     void path_publish_thread( int looprate=30 );
+    void detailed_path_publish_thread( int looprate=30 );
     void w0_T_w1_publish_thread( int looprate=3 ); //if world exists(0,1) will publish else nothing
     void cam_visual_publish_enable() { b_cam_visual_publish = true;}
     void cam_visual_publish_disable() {b_cam_visual_publish = false; }
@@ -141,6 +143,7 @@ private:
     //  makes use of  manager->getEdgeLen() and global_lmb and publish edges.
 public:
     void disjointset_statusimage_publish_thread( int looprate = 10 ) const;
+    void disjointset_statusjson_publish_thread( int looprate = 10 ) ; //since i define the ros::Publisher inside this thread, I cannot set this as const. :(
     void disjointset_statusimage_publish_enable() { b_disjointset_statusimage_publish = true;}
     void disjointset_statusimage_publish_disable() {b_disjointset_statusimage_publish = false; }
 

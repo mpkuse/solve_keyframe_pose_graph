@@ -275,6 +275,61 @@ int Worlds::n_sets() const  //< number of sets
     return disjoint_set.set_count();
 }
 
+const json Worlds::disjoint_set_status_json() const
+{
+    json obj;
+
+    std::lock_guard<std::mutex> lk(mutex_world);
+
+    obj["Global"]["n_worlds"] =  disjoint_set.element_count();
+    obj["Global"]["set_count"] = disjoint_set.set_count();
+
+    //loop thru all elements
+    for( int i=0 ; i<disjoint_set.element_count() ; i++ )
+    {
+        int setID = disjoint_set.find_set( i ) ;
+
+        json this_obj;
+        this_obj["worldID"] = i;
+        this_obj["setID_of_worldID"] = setID;
+
+        if( i>=0 && i< vec_world_starts.size() )
+            this_obj["start_stamp"] = vec_world_starts.at(i).toNSec();
+        else
+            this_obj["start_stamp"] = ros::Time().toNSec();
+
+        if( i>=0 && i< vec_world_ends.size() )
+            this_obj["end_stamp"] = vec_world_ends.at(i).toNSec();
+        else
+            this_obj["end_stamp"] = ros::Time().toNSec();
+
+        obj["WorldInfo"].push_back( this_obj );
+    }
+
+
+    #if 0
+    // all between world poses worlds
+    obj["BetweenWorldsRelPose"] = {};
+    for( auto it=rel_pose_between_worlds__wb_T_wa.begin() ; it!=rel_pose_between_worlds__wb_T_wa.end() ; it++ )
+    {
+        auto key = it->first; //this is std::pair<m,n>
+        Matrix4d wb_T_wa = it->second;
+        string info_wb_T_wa = rel_pose_between_worlds__wb_T_wa___info_string.at( key );
+
+        json iterm;
+        iterm["world_b"] = std::get<0>(it->first);
+        iterm["world_a"] = std::get<1>(it->first);
+        iterm["wb_T_wa"] = RawFileIO::eigen_matrix_to_json( wb_T_wa  );
+        iterm["wb_T_wa"]["data_pretty"] = PoseManipUtils::prettyprintMatrix4d(wb_T_wa);
+        iterm["info_wb_T_wa"] = info_wb_T_wa;
+        obj["BetweenWorldsRelPose"].push_back( iterm );
+    }
+    #endif
+
+
+    return obj;
+}
+
 const string Worlds::disjoint_set_status() const
 {
     std::lock_guard<std::mutex> lk(mutex_world);

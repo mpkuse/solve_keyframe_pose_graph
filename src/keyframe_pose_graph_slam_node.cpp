@@ -422,11 +422,14 @@ int main( int argc, char ** argv)
         }
     }
 
-    if( adhoc_pubpath )
-        path_pub_th = std::thread{ &Composer::path_publish_thread, cmpr, 30 };
+    if( adhoc_pubpath ) {
+        // path_pub_th = std::thread{ &Composer::path_publish_thread, cmpr, 30 };
+        path_pub_th = std::thread{ &Composer::detailed_path_publish_thread, cmpr, 10 };
+    }
 
-    if( adhoc_pubw0_T_w1 )
+    if( adhoc_pubw0_T_w1 ) {
         w0_T_w1_pub_th = std::thread{ &Composer::w0_T_w1_publish_thread, cmpr, 3 };
+    }
     #endif //adhoc
 
     // ++ loop edge publish thread
@@ -438,6 +441,7 @@ int main( int argc, char ** argv)
     cmpr->disjointset_statusimage_publish_enable();
     // cmpr->disjointset_statusimage_publish_disable();
     std::thread disjointset_monitor_pub_th( &Composer::disjointset_statusimage_publish_thread, cmpr, 1 );
+    std::thread disjointset_monitortxt_pub_th( &Composer::disjointset_statusjson_publish_thread, cmpr, 1 );
 
 
     // TODO
@@ -504,6 +508,7 @@ int main( int argc, char ** argv)
     cam_visual_pub_th.join();
     loopedge_pub_th.join();
     disjointset_monitor_pub_th.join();
+    disjointset_monitortxt_pub_th.join();
 
     #ifdef __main__adhoc__
     if( adhoc_pubpath )
