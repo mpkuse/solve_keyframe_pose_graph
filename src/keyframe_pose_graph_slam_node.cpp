@@ -236,6 +236,51 @@ int main( int argc, char ** argv)
     ros::NodeHandle nh("~");
 
 
+    //--- loadStateFromDisk, saveStateToDisk ---//
+    string loadStateFromDisk = "";
+    if( nh.getParam( "loadStateFromDisk", loadStateFromDisk ) == true )
+    {
+        if( loadStateFromDisk.compare("") == 0 ) {
+            ROS_WARN( "[keyframe_pose_graph_slam_node] loadStateFromDisk cmdline parameter was found, but with a empty string, so I will not loadStateFromDisk()");
+        } else {
+            // now make sure it is a directory
+            if( RawFileIO::is_path_a_directory(loadStateFromDisk) ) {
+                ROS_INFO( "[keyframe_pose_graph_slam_node] loadStateFromDisk=%s, Directory exists...OK!", loadStateFromDisk.c_str() );
+                cout << TermColor::GREEN() <<  "[keyframe_pose_graph_slam_node] loadStateFromDisk=" << loadStateFromDisk << ", Directory exists...OK!" << TermColor::RESET() << endl;
+            }
+            else {
+                ROS_ERROR( "[keyframe_pose_graph_slam_node] You specified a directory for loadStateFromDisk=`%s`, This path need to exist\n...EXIT\n", loadStateFromDisk.c_str());
+                exit(1);
+            }
+        }
+    } else {
+        ROS_WARN( "[keyframe_pose_graph_slam_node] loadStateFromDisk cmdline parameter was not found, so I will not loadStateFromDisk()");
+    }
+
+    string saveStateToDisk = "";
+    if( nh.getParam( "saveStateToDisk", saveStateToDisk ) == true )
+    {
+        if( saveStateToDisk.compare("") == 0 ) {
+            ROS_WARN( "[keyframe_pose_graph_slam_node] saveStateToDisk cmdline parameter was found, but with a empty string, so I will not saveStateToDisk()");
+        } else {
+            // now make sure it is a directory
+            if( RawFileIO::is_path_a_directory(saveStateToDisk) ) {
+                ROS_INFO( "[keyframe_pose_graph_slam_node] saveStateToDisk=%s, Directory exists...OK!", saveStateToDisk.c_str() );
+                cout << TermColor::GREEN() <<  "[keyframe_pose_graph_slam_node] saveStateToDisk=" << saveStateToDisk << ", Directory exists...OK!" << TermColor::RESET() << endl;
+            }
+            else {
+                ROS_ERROR( "[keyframe_pose_graph_slam_node] You specified a directory for saveStateToDisk=`%s`, This path need to exist and be writable\n...EXIT\n", saveStateToDisk.c_str());
+                exit(1);
+            }
+        }
+    } else {
+        ROS_WARN( "[keyframe_pose_graph_slam_node] saveStateToDisk cmdline parameter was not found, so I will not saveStateToDisk()");
+    }
+
+    //--- END loadStateFromDisk, saveStateToDisk ---//
+
+
+
     // Setup subscribers and callbacks
     NodeDataManager * manager = new NodeDataManager(nh);
 
@@ -306,13 +351,8 @@ int main( int argc, char ** argv)
 
     // another class for the core pose graph optimization
     PoseGraphSLAM * slam = new PoseGraphSLAM( manager );
-    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
-    // slam->new_optimize6DOF_enable();
-    // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
 
-    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
-    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
-    std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
+
 
 
     // another class for viz.
@@ -324,6 +364,19 @@ int main( int argc, char ** argv)
 
     //----Pose Composer---//
     Composer * cmpr = new Composer( manager, slam, viz , nh);
+
+    #define __LOAD_STATE__ 0 //set this to 1 to enable, 0 to disable
+    #if __LOAD_STATE__
+    cmpr->loadStateFromDisk( "/Bulk_Data/chkpts_posegraph_solver" );
+    // cout << "PREMATURE EXIT\n";
+    // exit(1);
+    #endif
+
+    if( loadStateFromDisk.compare("") != 0 )
+    {
+        cmpr->loadStateFromDisk( loadStateFromDisk );
+    }
+
 
     // ++ start the pose assember thread - This is needed for the following publish threads
     // It queries data from manager, slam and assembles the upto date data. This is threadsafe.
@@ -342,6 +395,43 @@ int main( int argc, char ** argv)
     // cmpr->cam_visual_publish_disable();
     std::thread cam_visual_pub_th( &Composer::cam_visual_publish_thread, cmpr, 30 );
 
+    #define __main__adhoc__
+    #ifdef __main__adhoc__ //adhoc
+    string __tmp_adhoc_pubpath="", __tmp_adhoc_pubw0_T_w1="";
+    bool   adhoc_pubpath=false, adhoc_pubw0_T_w1=false;
+    std::thread path_pub_th, w0_T_w1_pub_th;
+
+    if( nh.getParam( "adhoc_pubpath", __tmp_adhoc_pubpath ) == true )
+    {
+        cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath`\n";
+        if( __tmp_adhoc_pubpath.compare("true") == 0 ) {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is true, so will publish path\n";
+            adhoc_pubpath=true;
+        }else {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is NOT true, so wont publish path\n";
+        }
+    }
+
+    if( nh.getParam( "adhoc_pubw0_T_w1", __tmp_adhoc_pubw0_T_w1 ) == true )
+    {
+        if( __tmp_adhoc_pubw0_T_w1.compare("true") == 0 ) {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is true, so will publish w0_T_w1\n";
+            adhoc_pubw0_T_w1 = true;
+        }else {
+            cout << "[keyframe_pose_graph_slam_node] roslaunch param `adhoc_pubpath` is NOT true, so will not publish w0_T_w1\n";
+        }
+    }
+
+    if( adhoc_pubpath ) {
+        // path_pub_th = std::thread{ &Composer::path_publish_thread, cmpr, 30 };
+        path_pub_th = std::thread{ &Composer::detailed_path_publish_thread, cmpr, 10 };
+    }
+
+    if( adhoc_pubw0_T_w1 ) {
+        w0_T_w1_pub_th = std::thread{ &Composer::w0_T_w1_publish_thread, cmpr, 3 };
+    }
+    #endif //adhoc
+
     // ++ loop edge publish thread
     cmpr->loopedge_publish_enable();
     // cmpr->loopedge_publish_disable();
@@ -351,6 +441,7 @@ int main( int argc, char ** argv)
     cmpr->disjointset_statusimage_publish_enable();
     // cmpr->disjointset_statusimage_publish_disable();
     std::thread disjointset_monitor_pub_th( &Composer::disjointset_statusimage_publish_thread, cmpr, 1 );
+    std::thread disjointset_monitortxt_pub_th( &Composer::disjointset_statusjson_publish_thread, cmpr, 1 );
 
 
     // TODO
@@ -377,6 +468,13 @@ int main( int argc, char ** argv)
     //--- setup manager publishers threads - adhoc ---//
     std::thread th4( periodic_publish_odoms, manager, viz, 30.0, 0.0, 0.0 ); //if you enable this, dont forget to join(), after spin() returns.
 
+
+    // std::thread th_slam( &PoseGraphSLAM::optimize6DOF, slam );
+    // slam->new_optimize6DOF_enable();
+    // std::thread th_slam( &PoseGraphSLAM::new_optimize6DOF, slam );
+    slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_enable();
+    // slam->reinit_ceres_problem_onnewloopedge_optimize6DOF_disable();
+    std::thread th_slam( &PoseGraphSLAM::reinit_ceres_problem_onnewloopedge_optimize6DOF, slam );
 
 
 
@@ -410,9 +508,26 @@ int main( int argc, char ** argv)
     cam_visual_pub_th.join();
     loopedge_pub_th.join();
     disjointset_monitor_pub_th.join();
+    disjointset_monitortxt_pub_th.join();
+
+    #ifdef __main__adhoc__
+    if( adhoc_pubpath )
+        path_pub_th.join();
+    if( adhoc_pubw0_T_w1 )
+        w0_T_w1_pub_th.join();
+    #endif
 
 
+    //make this to 1 to save state to file upon exit, 0 to disable saving to file
+    #define __SAVE_STATE__ 0
+    #if __SAVE_STATE__
+    cmpr->saveStateToDisk( "/Bulk_Data/chkpts_posegraph_solver" );
+    #endif
 
+    if( saveStateToDisk.compare("") != 0 )
+    {
+        cmpr->saveStateToDisk( saveStateToDisk );
+    }
 
     #define __LOGGING__ 0 // make this 1 to enable logging. 0 to disable logging. rememeber to catkin_make after this change
     #if __LOGGING__
