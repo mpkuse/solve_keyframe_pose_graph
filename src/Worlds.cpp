@@ -166,8 +166,7 @@ bool Worlds::setPoseBetweenWorlds( int m, int n, const Matrix4d m_T_n, const str
 
     // ideally, disjoint_set.union_sets( m, n ), but doing the min max trick to retain the id of earliest sample.
     disjoint_set.union_sets( max(m,n), min(m,n) );
-    disjoint_set_debug += "\t\t\tunion_sets( " + std::to_string(max(m,n)) + "," + std::to_string(min(m,n)) + ")\n";
-    disjoint_set_log += "union_sets:"+std::to_string(max(m,n))+","+std::to_string(min(m,n))+";";
+    disjoint_set_debug += "\t\t\tunion_sets( " + std::to_string(m) + "," + std::to_string(n) + ")\n";
 }
 
 // m and n are worldIDs. A rel pose between two world will exist if they are in same set.
@@ -180,9 +179,6 @@ bool Worlds::is_exist( int m, int n ) const
 
     if( m==n )
         return true;
-
-    if( m >= n_worlds() || n >= n_worlds() )
-        return false;
 
     {
     std::lock_guard<std::mutex> lk(mutex_world);
@@ -236,7 +232,6 @@ void Worlds::world_starts( ros::Time _t )
     // Add a new element in disjoiunt set.
     disjoint_set.add_element( vec_world_starts.size() -1, true );
     disjoint_set_debug += "\t\t\tadd_element( " + std::to_string( vec_world_starts.size() -1 ) + ")\n";
-    disjoint_set_log += "add_element:" + std::to_string( vec_world_starts.size() -1 ) + ";";
 }
 
 void Worlds::world_ends( ros::Time _t )
@@ -273,61 +268,6 @@ int Worlds::n_sets() const  //< number of sets
     std::lock_guard<std::mutex> lk(mutex_world);
 
     return disjoint_set.set_count();
-}
-
-const json Worlds::disjoint_set_status_json() const
-{
-    json obj;
-
-    std::lock_guard<std::mutex> lk(mutex_world);
-
-    obj["Global"]["n_worlds"] =  disjoint_set.element_count();
-    obj["Global"]["set_count"] = disjoint_set.set_count();
-
-    //loop thru all elements
-    for( int i=0 ; i<disjoint_set.element_count() ; i++ )
-    {
-        int setID = disjoint_set.find_set( i ) ;
-
-        json this_obj;
-        this_obj["worldID"] = i;
-        this_obj["setID_of_worldID"] = setID;
-
-        if( i>=0 && i< vec_world_starts.size() )
-            this_obj["start_stamp"] = vec_world_starts.at(i).toNSec();
-        else
-            this_obj["start_stamp"] = ros::Time().toNSec();
-
-        if( i>=0 && i< vec_world_ends.size() )
-            this_obj["end_stamp"] = vec_world_ends.at(i).toNSec();
-        else
-            this_obj["end_stamp"] = ros::Time().toNSec();
-
-        obj["WorldInfo"].push_back( this_obj );
-    }
-
-
-    #if 0
-    // all between world poses worlds
-    obj["BetweenWorldsRelPose"] = {};
-    for( auto it=rel_pose_between_worlds__wb_T_wa.begin() ; it!=rel_pose_between_worlds__wb_T_wa.end() ; it++ )
-    {
-        auto key = it->first; //this is std::pair<m,n>
-        Matrix4d wb_T_wa = it->second;
-        string info_wb_T_wa = rel_pose_between_worlds__wb_T_wa___info_string.at( key );
-
-        json iterm;
-        iterm["world_b"] = std::get<0>(it->first);
-        iterm["world_a"] = std::get<1>(it->first);
-        iterm["wb_T_wa"] = RawFileIO::eigen_matrix_to_json( wb_T_wa  );
-        iterm["wb_T_wa"]["data_pretty"] = PoseManipUtils::prettyprintMatrix4d(wb_T_wa);
-        iterm["info_wb_T_wa"] = info_wb_T_wa;
-        obj["BetweenWorldsRelPose"].push_back( iterm );
-    }
-    #endif
-
-
-    return obj;
 }
 
 const string Worlds::disjoint_set_status() const
@@ -443,225 +383,4 @@ void Worlds::print_summary(int verbosity ) const
     cout << "\t\t\\---- END Info from DisjointSet----/\n";
 
 
-}
-
-
-json Worlds::saveStateToDisk() const
-{
-    cout << TermColor::GREEN() << "^^^^^ Worlds::saveStateToDisk ^^^^^\n" << TermColor::RESET();
-    json obb;
-
-    //---
-    // rel_pose_between_worlds__wb_T_wa and rel_pose_between_worlds__wb_T_wa___info_string
-    cout << "[Worlds::saveStateToDisk]rel_pose_between_worlds__wb_T_wa\n"; int n_c=0;
-    obb["rel_pose_between_worlds__wb_T_wa"] = {};
-    for( auto it=rel_pose_between_worlds__wb_T_wa.begin() ; it!=rel_pose_between_worlds__wb_T_wa.end() ; it++ )
-    {
-        auto key = it->first; //this is std::pair<m,n>
-        Matrix4d wb_T_wa = it->second;
-        string info_wb_T_wa = rel_pose_between_worlds__wb_T_wa___info_string.at( key );
-
-        json iterm;
-        iterm["node_b"] = std::get<0>(it->first);
-        iterm["node_a"] = std::get<1>(it->first);
-        iterm["wb_T_wa"] = RawFileIO::eigen_matrix_to_json( wb_T_wa  );
-        iterm["wb_T_wa"]["data_pretty"] = PoseManipUtils::prettyprintMatrix4d(wb_T_wa);
-        iterm["info_wb_T_wa"] = info_wb_T_wa;
-        obb["rel_pose_between_worlds__wb_T_wa"].push_back( iterm );
-        n_c++;
-    }
-    cout << "[Worlds::saveStateToDisk]done rel_pose_between_worlds__wb_T_wa, there were " << n_c << " items\n";
-
-
-
-    //---
-    // vec_world_starts, vec_world_ends
-    json A;
-    cout << "\tvec_world_starts: " ;
-    for( int i=0 ; i<vec_world_starts.size() ; i++ )
-    {
-        json _a;
-        _a["stampNSec"] = vec_world_starts.at(i).toNSec();
-        A.push_back( _a );
-        cout << "\t" << vec_world_starts.at(i);
-    }
-    cout << endl;
-    cout << "[Worlds::saveStateToDisk]vec_world_starts.size=" << vec_world_starts.size() << endl;
-
-    json B;
-    cout << "\tvec_world_ends: " ;
-    for( int i=0 ; i<vec_world_ends.size() ; i++ )
-    {
-        json _b;
-        _b["stampNSec"] = vec_world_ends.at(i).toNSec();
-        B.push_back( _b );
-        cout << "\t" << vec_world_ends.at(i);
-    }
-    cout << endl;
-    cout << "[Worlds::saveStateToDisk]vec_world_ends.size=" << vec_world_ends.size() << endl;
-
-    obb["vec_world_starts"] = A;
-    obb["vec_world_ends"] = B;
-
-
-    //---
-    // disjoint_set
-    obb["disjoint_set"]["debug_string"] = disjoint_set_debug;
-    obb["disjoint_set"]["log_string"] = disjoint_set_log;
-    cout << "[Worlds::saveStateToDisk] This will be used to reconstruct the disjointset when loading from disk. disjoint_set_log=" << disjoint_set_log << endl;
-
-    cout << TermColor::GREEN() << "^^^^^ DONE Worlds::saveStateToDisk ^^^^^\n" << TermColor::RESET();
-
-    return obb;
-}
-
-
-bool Worlds::loadStateFromDisk( json _objk )
-{
-    cout << TermColor::GREEN() << "^^^^^^^^^^^^^^ Worlds::loadStateFromDisk ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
-
-    //--- rel_pose_between_worlds__wb_T_wa
-    int n_rel_wposes = _objk.at("rel_pose_between_worlds__wb_T_wa").size();
-    cout << "[Worlds::loadStateFromDisk]I found " << n_rel_wposes << " number of relative poses between the world in the json file\n" ;
-    for( int i=0 ; i<n_rel_wposes ; i++ ) {
-        int node_a = _objk["rel_pose_between_worlds__wb_T_wa"][i]["node_a"];
-        int node_b = _objk["rel_pose_between_worlds__wb_T_wa"][i]["node_b"];
-        auto p = std::make_pair( node_b, node_a );
-        string info_wb_T_wa = _objk["rel_pose_between_worlds__wb_T_wa"][i]["info_wb_T_wa"];
-        Matrix4d wb_T_wa;
-        bool mat_statuis = RawFileIO::read_eigen_matrix4d_fromjson( _objk["rel_pose_between_worlds__wb_T_wa"][i]["wb_T_wa"], wb_T_wa );
-        if( mat_statuis == false )
-        {
-            cout << TermColor::RED() << "[Worlds::loadStateFromDisk]Cannot load eigen matrix from json at index=" << i << " this is fatal, return false\n" << TermColor::RESET();
-            return false;
-        }
-
-        cout << "\t" << node_b << "_T_" << node_a ;
-        rel_pose_between_worlds__wb_T_wa[ p ] = wb_T_wa;
-        rel_pose_between_worlds__wb_T_wa___info_string[ p ] = info_wb_T_wa;
-
-
-    }
-    cout << endl;
-    cout << "OK...rel_pose_between_worlds__wb_T_wa\n";
-
-
-    //--- disjoint_set
-    //  example:
-    //         "disjoint_set": {
-    //         "debug_string": "\t\t\tadd_element( 0)\n\t\t\tadd_element( 1)\n\t\t\tadd_element( 2)\n\t\t\tunion_sets( 0,2)\n",
-    //         "log_string": "add_element:0;add_element:1;add_element:2;union_sets:0,2;"
-    //    }
-    string x_debug_str = _objk["disjoint_set"]["debug_string"];
-    string x_parse_str = _objk["disjoint_set"]["log_string"];
-    this->disjoint_set_debug = x_debug_str;
-    this->disjoint_set_log = x_parse_str;
-    vector<string> _cmds = RawFileIO::split( x_parse_str, ';' );
-    cout << "log_string = " << x_parse_str << endl;
-    cout << "For populating the disjoint set, I see " << _cmds.size()-1 << " commands\n";
-    //         because last statement will be empty, ';' separated   ^^^
-    for( int i =0 ; i<_cmds.size() ; i++ )
-    {
-        if( _cmds[i].length() < 4 ) //skip empty string
-            break;
-
-        cout << "i=" << i << " cmd=`" << _cmds[i] << "`" << endl;
-        vector<string> sp = RawFileIO::split( _cmds[i] , ':');
-        cout << "\top_code=`" << sp[0] << "`" << endl;
-        if( sp[0].compare("add_element") == 0 )
-        {
-            if( sp.size() != 2 )
-            {
-                cout << "Invalid opcode add_element need to have number and sp.size() has to be 2, currently it is" << sp.size() << endl;
-                return false;
-            }
-            int x;
-            try {
-              x = stoi(sp[1]);
-            }
-            catch(std::invalid_argument& e){
-              cout << " if no conversion could be performed\n";
-              return false;
-            }
-            catch(std::out_of_range& e){
-                cout << "if the converted value would fall out of the range of the result type or if the underlying function (std::strtol or std::strtoull) sets errno to ERANGE.\n";
-                return false;
-            }
-            catch(...) {
-              cout << "unknown exception everything else\n";
-              return false;
-            }
-
-
-            //parse done, now perform
-            cout << "\tDO add_element " << x << endl;
-            disjoint_set.add_element( x, true );
-        }
-        else if( sp[0].compare("union_sets") == 0 )
-        {
-            if( sp.size() != 2 )
-            {
-                cout << "Invalid opcode add_element need to have number and sp.size() has to be 2, currently it is" << sp.size() << endl;
-                return false;
-            }
-
-            vector<string> operands = RawFileIO::split( sp[1], ',' );
-            if( operands.size() != 2 ) {
-                cout << "union_sets need to have 2 operands\n";
-                return false;
-            }
-            int x, y;
-            try {
-              x = stoi(operands[0]);
-              y = stoi(operands[1]);
-            }
-            catch(std::invalid_argument& e){
-              cout << " if no conversion could be performed\n";
-              return false;
-            }
-            catch(std::out_of_range& e){
-                cout << "if the converted value would fall out of the range of the result type or if the underlying function (std::strtol or std::strtoull) sets errno to ERANGE.\n";
-                return false;
-            }
-            catch(...) {
-              cout << "unknown exception everything else\n";
-              return false;
-            }
-
-            //parse done, now perform
-            cout << "\tDO union_sets " << x << ", " << y << endl;
-            disjoint_set.union_sets( max(x,y), min(x,y) );
-
-        } else {
-            cout << "[Worlds::loadStateFromDisk] While parsing the disjointset string, I encountered an unknown opcode=" << sp[0] << " in cmd=" << _cmds[i] << " at index " << i <<". Only allowed opcodes are add_element and union_sets (case sensitive)\n";
-            return false;
-        }
-    }
-    cout << "[Worlds::loadStateFromDisk]Done with disjointset re-creation\n";
-
-
-    //--- vec_world_starts, vec_world_ends
-    int n_wstarts = _objk.at("vec_world_starts").size();
-    cout << "There are " << n_wstarts << " `vec_world_starts`\n";
-    for( int i=0 ; i<n_wstarts; i++ )
-    {
-        ros::Time __tmpt = ros::Time().fromNSec( _objk["vec_world_starts"][i]["stampNSec"] );
-        cout << "\t" <<  __tmpt;
-        vec_world_starts.push_back( __tmpt );
-    }
-    cout << endl;
-
-    int n_wends = _objk.at("vec_world_ends").size();
-    cout << "There are " << n_wends << " `vec_world_ends`\n";
-    for( int i=0 ; i<n_wends; i++ )
-    {
-        ros::Time __tmpt = ros::Time().fromNSec( _objk["vec_world_ends"][i]["stampNSec"] );
-        cout << "\t" << __tmpt ;
-        vec_world_ends.push_back( __tmpt );
-    }
-    cout << endl;
-
-
-    cout << TermColor::GREEN() << "^^^^^^^^^^ DONE Worlds::loadStateFromDisk ^^^^^^^^^^^^^^^\n" << TermColor::RESET();
-    return true;
 }

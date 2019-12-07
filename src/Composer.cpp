@@ -54,14 +54,12 @@ void Composer::pose_assember_thread( int looprate )
         for( int i=0 ; i<manager->getNodeLen() ; i++ )
         {
             int world_id = manager->which_world_is_this( manager->getNodeTimestamp(i) );
-            int setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( world_id  );
             __Composer__pose_assember_thread_posedebug(
-            cout << "\t%% i=" << i << " world#" << world_id << " setID_of_worldID=" << setID_of_worldID << endl;
+            cout << "i=" << i << " world#" << world_id << endl;
             )
 
             if( i>=0 && i<= ____solvedUntil )
             {
-                __Composer__pose_assember_thread_posedebug( cout << "in i>=0 && i<= ____solvedUntil\n" );
                 Matrix4d w_T_c;
                 // If the optimized pose exists use that else use the odometry pose
                 int from_slam_or_from_odom = -1; // 1: from slam ; 2: from odom ; 3: kidnapped node
@@ -76,9 +74,6 @@ void Composer::pose_assember_thread( int looprate )
                             w_T_c = manager->getNodePose( i );
                             // cerr << "w_T_c=" << PoseManipUtils::prettyprintMatrix4d( w_T_c ) << endl;
                             from_slam_or_from_odom = 2;
-
-
-
                         }
                     }
                 } else {
@@ -112,19 +107,11 @@ void Composer::pose_assember_thread( int looprate )
 
             if( i>(____solvedUntil)  )
             {
-                __Composer__pose_assember_thread_posedebug( cout << "in i>(____solvedUntil)\n" );
-
                 int last_idx=-1;
                 Matrix4d w_TM_i;
-                #if 1 // added during loadStateFromDisk implementation
-                int w_TM_i_from_mgr_or_from_slam = -1; // 0: mgr, 1: slam
-                #endif
 
                 if( ____solvedUntil == 0 ) {
                     w_TM_i = manager->getNodePose( i );
-                    #if 1 // added during loadStateFromDisk implementation
-                    w_TM_i_from_mgr_or_from_slam = 0;
-                    #endif
                 } else {
                     if( world_id >= 0 && ____solvedUntil_worldid == world_id ) {
                         last_idx = ____solvedUntil;}
@@ -163,29 +150,6 @@ void Composer::pose_assember_thread( int looprate )
                     Matrix4d last_M_i = manager->getNodePose( last_idx ).inverse() * manager->getNodePose( i );
                     w_TM_i = w_T_last * last_M_i;
                 }
-
-
-                #if 1
-                // added during loadStateFromDisk implementation
-                // idea is always set ws_T_c and not the usual w_T_c
-                //  ws_T_c := ws_T_w * w_T_c
-                if( world_id != setID_of_worldID && w_TM_i_from_mgr_or_from_slam==0 ) {
-                    __Composer__pose_assember_thread_posedebug(
-                    cout << "[world_id != setID_of_worldID]i=" << i << " world#" << world_id << " setID_of_worldID=" << setID_of_worldID << endl;
-                    );
-                    if( manager->getWorldsConstPtr()->is_exist(setID_of_worldID,world_id) ) {
-                        __Composer__pose_assember_thread_posedebug(
-                        cout << "[world_id != setID_of_worldID]relative pose exist beween these worlds.\n";
-                        );
-                        Matrix4d ws_T_w = manager->getWorldsConstPtr()->getPoseBetweenWorlds(setID_of_worldID,world_id);
-                        Matrix4d ws_T_c = ws_T_w * w_TM_i;
-                        w_TM_i = ws_T_c;
-                    } else {
-                        __Composer__pose_assember_thread_posedebug( cout << "[world_id != setID_of_worldID]relative pose doesnt exist beween these worlds.\n"; );
-                    }
-                }
-
-                #endif // end of addition during oadStateFromDisk implementation
 
 
                 if( jmb.count( world_id ) ==  0 ) {
@@ -283,7 +247,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
 {
     //--- Options
     const int options_line_color_style = 10; // should be either 10 or 12. 10:color by WorldID; 12:  //color by world setID
-    const float options_linewidth_multiplier  = 1; // thickness of the line
+    const float options_linewidth_multiplier  = 3; // thickness of the line
 
     //---
 
@@ -296,11 +260,9 @@ void Composer::bf_traj_publish_thread( int looprate ) const
     static thread_local std::mt19937 generator;
     std::uniform_int_distribution<int> distribution(0,100);
 
-    int x_loop_count = 0;
     while( b_bf_traj_publish )
     {
         rate.sleep();
-        x_loop_count++;
         __Composer_bf_traj_publish_thread(
         cout <<  "[Composer::bf_traj_publish_thread] publish : global_lmb.size()=" << global_lmb.size() << "\t n_worlds aka. global_jmb.size()=" <<  global_jmb.size() << endl;
         )
@@ -315,8 +277,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
                 continue;
             }
 
-            bool publish_all = (distribution(generator) < 5 || x_loop_count < 10 )?true:false;
-
+            bool publish_all = (distribution(generator) < 5)?true:false;
 
             for( auto it=global_jmb.begin() ; it!=global_jmb.end() ; it++ )
             {
@@ -396,7 +357,7 @@ void Composer::bf_traj_publish_thread( int looprate ) const
 void Composer::cam_visual_publish_thread( int looprate ) const
 {
     //--- Options
-    const int options_linewidth_multiplier = 1; //default 3
+    const int options_linewidth_multiplier = 3; //default 3
     //---
 
 
@@ -436,212 +397,6 @@ void Composer::cam_visual_publish_thread( int looprate ) const
     cout << TermColor::RED() << "Finished `Composer::cam_visual_publish_thread`\n" << TermColor::RESET() << endl;
 }
 
-// #define __Composer__path_publish_thread__(msg) msg;
-#define __Composer__path_publish_thread__(msg) ;
-void Composer::path_publish_thread( int looprate )
-{
-    cout << TermColor::GREEN() << "start `Composer::path_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
-    cout << "[Composer::path_publish_thread]will use `b_cam_visual_publish` for terminating this thread\n";
-    assert( looprate > 0 && looprate < 50 );
-
-    int n, prev_n = 0;
-    nav_msgs::Path path_msg;
-
-    string path_topic = string( "adhoc/xpath" );
-    ROS_INFO( "[Composer::path_publish_thread] Publish to %s", path_topic.c_str() );
-    pub_hz200_marker = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
-
-    ros::Publisher pub___path = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
-
-    ros::Rate rate(looprate);
-    while( b_cam_visual_publish )
-    {
-        rate.sleep();
-
-        {
-            __Composer__path_publish_thread__( "---\n");
-            std::lock_guard<std::mutex> lk(mx);
-            if(  global_latest_pose_worldid < 0 ) {
-                __Composer__path_publish_thread__( cout << "global_latest_pose_worldid is negative, so, continue...\n"; )
-                continue;
-            }
-
-            n = global_lmb.size();
-            if( prev_n == n || n == 0 ) {
-                __Composer__path_publish_thread__(
-                cout << "[Composer::path_publish_thread] nothing new, n same as prev_n=" << n << "\n";
-                )
-                continue;
-            }
-
-            Matrix4d imu_T_cam = manager->get_imu_T_cam();
-            Matrix4d wi_T_latest =  global_lmb.at( n-1 ) * imu_T_cam.inverse();
-
-            if( rand()%100 > 2 ) {
-                //add to msg
-                ros::Time stamp_of_it = manager->getNodeTimestamp( n-1 );
-                path_msg.header.stamp = stamp_of_it;
-                path_msg.header.frame_id = "world";
-                geometry_msgs::PoseStamped pxl;
-                pxl.header.stamp = stamp_of_it;
-                PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wi_T_latest, pxl.pose );
-                path_msg.poses.push_back( pxl );
-                __Composer__path_publish_thread__(
-                cout << "[Composer::path_publish_thread]push_back " << stamp_of_it<< endl;
-                )
-            }
-            else {
-                // reset and set all again
-                __Composer__path_publish_thread__(
-                    cout << TermColor::iRED() << "[Composer::path_publish_thread]reset and then for h=[0:" << n << ")" <<  TermColor::RESET() << endl;
-                )
-                path_msg.poses.clear();
-                for( int h=0 ; h<n ; h++ )
-                {
-                    ros::Time stamp_of_it = manager->getNodeTimestamp( h );
-                    path_msg.header.stamp = stamp_of_it;
-                    path_msg.header.frame_id = "world";
-                    geometry_msgs::PoseStamped pxl;
-                    pxl.header.stamp = stamp_of_it;
-                    auto ___wi_T_c = global_lmb.at( h ) * imu_T_cam.inverse();
-                    PoseManipUtils::eigenmat_to_geometry_msgs_Pose( ___wi_T_c, pxl.pose );
-                    path_msg.poses.push_back( pxl );
-                }
-            }
-        }
-
-        prev_n = n;
-        __Composer__path_publish_thread__( cout << "[Composer::path_publish_thread]publish path, contains: " <<  path_msg.poses.size() << " poses\n"; )
-        pub___path.publish( path_msg );
-
-
-    }
-    cout << TermColor::RED() << "Finished `Composer::path_publish_thread`\n" << TermColor::RESET() << endl;
-}
-
-
-// #define __Composer__detailed_path_publish_thread__(msg) msg;
-#define __Composer__detailed_path_publish_thread__(msg) ;
-void Composer::detailed_path_publish_thread( int looprate=30 )
-{
-    cout << TermColor::GREEN() << "start `Composer::detailed_path_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
-    cout << "[Composer::detailed_path_publish_thread]will use `b_cam_visual_publish` for terminating this thread\n";
-    assert( looprate > 0 && looprate < 50 );
-
-
-    int n, prev_n = 0;
-    nav_msgs::Path path_msg;
-
-    string path_topic = string( "adhoc/xpath_detailed" );
-    ROS_INFO( "[Composer::detailed_path_publish_thread] Publish to %s", path_topic.c_str() );
-    ros::Publisher pub___path = nh.advertise<nav_msgs::Path>( path_topic , 1000 );
-
-    ros::Rate rate(looprate);
-    Matrix4d imu_T_cam = Matrix4d::Identity(); bool flag_imu_T_cam = false;
-
-    while( b_cam_visual_publish )
-    {
-        rate.sleep();
-        {
-            std::lock_guard<std::mutex> lk(mx);
-
-            nav_msgs::Path path_msg;
-            path_msg.poses.clear();
-            __Composer__detailed_path_publish_thread__( cout << "---\n"; )
-            for( int i=0 ; i<global_lmb.size() ; i++ )
-            {
-                if( flag_imu_T_cam == false)
-                {
-                    imu_T_cam = manager->get_imu_T_cam();
-                    flag_imu_T_cam = true;
-                }
-
-                if( flag_imu_T_cam == false ) {
-                    cout << "FATAIL.....This cannot be happening.....\n";
-                    exit(1);
-                }
-                Matrix4d wTc = global_lmb[i]; // this is pose of camera in the co-ordinate system of  setID_of_worldID
-                Matrix4d w_T_imu = wTc * imu_T_cam.inverse();
-
-
-                ros::Time stamp = manager->getNodeTimestamp(i);
-                int worldID = manager->which_world_is_this( stamp );
-
-
-                if( worldID < 0 )
-                    continue;
-                int setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( worldID );
-
-                __Composer__detailed_path_publish_thread__(
-                cout << "[Composer::detailed_path_publish_thread]worldID:" << worldID << "\tsetID_of_worldID:" << setID_of_worldID << "\t" << PoseManipUtils::prettyprintMatrix4d(wTc) << endl;
-                );
-
-                geometry_msgs::PoseStamped pose_i;
-                pose_i.header.stamp = stamp;
-                pose_i.header.frame_id = "worldID:" + to_string( worldID )+":"+"setID_of_worldID:"+to_string(setID_of_worldID);
-
-                // PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wTc, pose_i.pose );
-                PoseManipUtils::eigenmat_to_geometry_msgs_Pose( w_T_imu, pose_i.pose );
-
-
-                path_msg.poses.push_back( pose_i );
-            }
-            __Composer__detailed_path_publish_thread__(
-            cout << "[Composer::detailed_path_publish_thread]PUBLISH....path_msg.poses.size=" << path_msg.poses.size() << endl;
-            )
-            pub___path.publish( path_msg );
-        }
-    }
-
-}
-
-
-#define  __Composer__w0_T_w1_publish_thread( msg ) msg;
-// #define  __Composer__w0_T_w1_publish_thread( msg ) ;
-void Composer::w0_T_w1_publish_thread( int looprate )
-{
-    cout << TermColor::GREEN() << "start `Composer::w0_T_w1_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
-    assert( looprate > 0 && looprate < 5 );
-
-    string w0_T_w1_topic = string( "adhoc/w0_T_w1");
-    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", w0_T_w1_topic.c_str() );
-    ros::Publisher pub_w0_T_w1 = nh.advertise<geometry_msgs::PoseStamped>( w0_T_w1_topic , 1000 );
-
-
-    ros::Rate rate(looprate);
-    while( b_cam_visual_publish )
-    {
-        rate.sleep();
-
-        __Composer__w0_T_w1_publish_thread( cout << "----w0_T_w1_publish_thread---\n"; )
-
-
-        // w0_T_w1 if available
-        if( manager->getWorldsConstPtr()->is_exist( 0, 1 ) )
-        {
-            // publish.
-            __Composer__w0_T_w1_publish_thread( cout << "[Composer::w0_T_w1_publish_thread]w0_T_w1 exist...pubnlish/....\n"; )
-            Matrix4d w0_T_w1 = manager->getWorldsConstPtr()->getPoseBetweenWorlds( 0, 1);
-            __Composer__w0_T_w1_publish_thread( cout << "w0_T_w1=" << PoseManipUtils::prettyprintMatrix4d( w0_T_w1 ) << endl; )
-
-
-            geometry_msgs::PoseStamped msg;
-            PoseManipUtils::eigenmat_to_geometry_msgs_Pose( w0_T_w1, msg.pose );
-            msg.header.stamp = ros::Time();
-            msg.header.frame_id = "w0_T_w1";
-
-            pub_w0_T_w1.publish( msg );
-        }
-        else {
-            __Composer__w0_T_w1_publish_thread( cout << "[Composer::w0_T_w1_publish_thread]w0_T_w1 doesnt exist, so dont publish anything\n"; )
-        }
-
-
-    }
-
-    cout << TermColor::RED() << "Finished `Composer::w0_T_w1_publish_thread`\n" << TermColor::RESET() << endl;
-
-}
 
 
 // #define __Composer__loopedge_publish_thread(msg) msg;
@@ -775,45 +530,8 @@ void Composer::disjointset_statusimage_publish_thread( int looprate ) const
     cout << TermColor::RED() << "Finished `Composer::disjointset_statusimage_publish_thread`\n" << TermColor::RESET() << endl;
 }
 
-void Composer::disjointset_statusjson_publish_thread( int looprate )
-{
-    cout << TermColor::GREEN() << "start `Composer::disjointset_statusjson_publish_thread` @" << looprate << " hz" << TermColor::RESET() << endl;
-    assert( looprate > 0 && looprate < 50 );
-
-    string jsonstring_topic = string( "adhoc/disjoint_set_status_jsonstring" );
-    ROS_INFO( "[Composer::disjointset_statusjson_publish_thread] Publish to %s", jsonstring_topic.c_str() );
-    ros::Publisher pub_jsonstring = nh.advertise<std_msgs::String>( jsonstring_topic , 1000 );
 
 
-
-
-    ros::Rate rate(looprate);
-    string prev_status_str = "";
-    while( b_disjointset_statusimage_publish )
-    {
-        rate.sleep();
-
-        string curr_status_str = manager->getWorldsConstPtr()->disjoint_set_status_json().dump(4);
-        if( prev_status_str.compare(curr_status_str) == 0 ) {
-            // same as old, no point publishing
-            __Composer__disjointset_statusimage_publish_thread(
-            cout << "[Composer::disjointset_statusjson_publish_thread] No change in status, so dont publish image." << endl;
-            )
-            continue;
-        }
-
-        // publish only when changed, modify as need be.
-        std_msgs::String msg;
-        msg.data = curr_status_str;
-        pub_jsonstring.publish( msg );
-
-
-
-        prev_status_str = curr_status_str;
-    }
-
-    cout << TermColor::RED() << "Finished `Composer::disjointset_statusjson_publish_thread`\n" << TermColor::RESET() << endl;
-}
 
 //------ Publish body pose @200Hz ------//
 
@@ -826,20 +544,8 @@ void Composer::setup_200hz_publishers()
     pub_hz200_marker = nh.advertise<visualization_msgs::Marker>( marker_topic , 1000 );
 
 
-    // geometry_msgs::Pose
-    string pose_topic = string( "hz200/pose");
-    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", pose_topic.c_str() );
-    pub_hz200_pose = nh.advertise<geometry_msgs::Pose>( pose_topic , 1000 );
-
-    // geometry_msgs::PoseStamped
-    string posestamped_topic = string( "hz200/posestamped");
-    ROS_INFO( "[Composer::setup_200hz_publishers] Publish to %s", posestamped_topic.c_str() );
-    pub_hz200_posestamped = nh.advertise<geometry_msgs::PoseStamped>( posestamped_topic , 1000 );
-
-
-    // path
-
-
+    // puby =
+    // cmpr->set_200hz_odom_pub( puby )
 }
 
 
@@ -895,48 +601,25 @@ void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
     Matrix4d wf_T_imucurr = ( wf_T_camlast * imu_T_cam.inverse() ) * imulast_T_imucurr;
 
 
-    //==============================================================//
-    //--------------------done computation....now publixh-----------//
-    //==============================================================//
-    bool publish_marker = true;
-    bool publish_txt_marker = false;
-
 
     //
     // Make viz marker and publish
-    if( publish_marker ) {
-        visualization_msgs::Marker imu_m;
-        RosMarkerUtils::init_XYZ_axis_marker( imu_m, 1.0 );
-        imu_m.ns = "hz100_imu";
-        imu_m.id = 0;
-        RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_m  );
-        pub_hz200_marker.publish( imu_m );
-    }
+    visualization_msgs::Marker imu_m;
+    RosMarkerUtils::init_XYZ_axis_marker( imu_m, 1.0 );
+    imu_m.ns = "hz100_imu";
+    imu_m.id = 0;
+    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_m  );
+    pub_hz200_marker.publish( imu_m );
 
-    if( publish_txt_marker ) {
-        visualization_msgs::Marker imu_txt;
-        RosMarkerUtils::init_text_marker( imu_txt );
-        imu_txt.ns = "hz100_imu_txt";
-        imu_txt.text = "IMU@200hz";
-        imu_txt.scale.z = 0.5;
-        RosMarkerUtils::setcolor_to_marker( 1.0, 1.0, 1.0, imu_txt );
-        RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_txt  );
-        pub_hz200_marker.publish( imu_txt );
-    }
+    visualization_msgs::Marker imu_txt;
+    RosMarkerUtils::init_text_marker( imu_txt );
+    imu_txt.ns = "hz100_imu_txt";
+    imu_txt.text = "IMU@200hz";
+    imu_txt.scale.z = 0.5;
+    RosMarkerUtils::setcolor_to_marker( 1.0, 1.0, 1.0, imu_txt );
+    RosMarkerUtils::setpose_to_marker( wf_T_imucurr, imu_txt  );
+    pub_hz200_marker.publish( imu_txt );
 
-
-    geometry_msgs::Pose posex;
-    PoseManipUtils::eigenmat_to_geometry_msgs_Pose( wf_T_imucurr, posex );
-
-    geometry_msgs::PoseStamped posexstamped;
-    posexstamped.header.stamp = msg->header.stamp;
-    int _worldID = manager->which_world_is_this( cam_t );
-    int _setID_of_worldID = manager->getWorldsConstPtr()->find_setID_of_world_i( _worldID );
-    posexstamped.header.frame_id = "pose_in_world#" + std::to_string( _setID_of_worldID );
-    posexstamped.pose = posex;
-
-    pub_hz200_pose.publish( posex );
-    pub_hz200_posestamped.publish( posexstamped );
 
 
 
@@ -944,234 +627,3 @@ void Composer::imu_propagate_callback( const nav_msgs::Odometry::ConstPtr& msg )
 
 
 //------ END Publish body pose @200Hz ------//
-
-
-
-
-
-bool Composer::saveStateToDisk( string save_dir_path )
-{
-
-
-    //---
-    // rm -rf && mkdir
-    cout << TermColor::GREEN();
-    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
-    cout << "^^^^^^^^^^    Composer::saveStateToDisk  ^^^^^^^^^^\n";
-    cout << "^^^^^^^^^^    DIR=" << save_dir_path ;
-    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
-    cout << TermColor::RESET();
-
-
-    //---
-    // mark as kidnapped and signal end-of-world
-    cout << TermColor::iYELLOW() << "manager->curr_kidnap_status="<< manager->curr_kidnap_status() << TermColor::RESET() << ". 0:=unkidnapped  1:=kidnapped" << endl;
-    if( manager->curr_kidnap_status() == false ) { //mark as kidnapped when I am not kidnapped
-        cout << TermColor::iYELLOW() << "manager->mark_as_kidnapped_and_signal_end_of_world()\n" << TermColor::RESET() ;
-        manager->mark_as_kidnapped_and_signal_end_of_world();
-    } else {
-        cout << "I was already kidnapped when you pressed CTRL+C, so no further action taken\n";
-    }
-    cout << TermColor::iYELLOW() << "(after marking kidnapped) manager->curr_kidnap_status="<< manager->curr_kidnap_status() << TermColor::RESET() << ". 0:=unkidnapped  1:=kidnapped" << endl;
-
-
-
-    //---
-    // rm -rf save_folder_name ; mkdir save_folder_name
-    string system_cmd0 = string( "rm -rf ") + save_dir_path + " && mkdir "+ save_dir_path;
-    const int rm_dir_err0 = RawFileIO::exec_cmd( system_cmd0 );
-    if ( rm_dir_err0 == -1 )
-    {
-        cout << TermColor::RED() << "[Composer::saveStateToDiskr] Cannot mkdir folder: " << save_dir_path << "!\n" << TermColor::RESET() << endl;
-        cout << "So not saveing state to disk...return false\n";
-        return false;
-    }
-
-
-    //---
-    // save pose graph (corrected poses)
-    IOFormat CSVFormat(FullPrecision, DontAlignCols, ", ", "\n");
-    json obj;
-
-    json pose_graph;
-    for( int i=0 ; i<global_lmb.size() ; i++ )
-    {
-        json this_node;
-        Matrix4d wTc = global_lmb[i];
-
-        // wj_T_c : Corrected poses
-        this_node["w_T_c"]["rows"] = wTc.rows();
-        this_node["w_T_c"]["cols"] = wTc.rows();
-        std::stringstream ss;
-        ss <<  wTc.format(CSVFormat);
-        this_node["w_T_c"]["data"] = ss.str();
-        this_node["w_T_c"]["data_pretty"] = PoseManipUtils::prettyprintMatrix4d(wTc);
-
-
-        // j : setID of the world
-        // k : worldID of this pose
-        int worldid = manager->which_world_is_this( manager->getNodeTimestamp(i) );
-        this_node["worldID"] = worldid;
-        this_node["setID_of_worldID"] = manager->getWorldsConstPtr()->find_setID_of_world_i( worldid );
-        this_node["stampNSec"] = manager->getNodeTimestamp(i).toNSec();
-        this_node["seq"] = i;
-
-        pose_graph.push_back( this_node );
-    }
-    obj["SolvedPoseGraph"] = pose_graph;
-
-    //---
-    // Kidnap Timestamps
-    obj["KidnapTimestamps"] = manager->kidnap_data_to_json();
-    cout << "In len( obj[\"KidnapTimestamps\"][\"kidnap_starts\"] ) = " << obj["KidnapTimestamps"]["kidnap_starts"].size() << endl;
-    cout << "In len( obj[\"KidnapTimestamps\"][\"kidnap_ends\"] ) = " << obj["KidnapTimestamps"]["kidnap_ends"].size() << endl;
-
-    //---
-    // World poses data and disjoint_set.
-    obj["WorldsData"] = manager->getWorldsConstPtr()->saveStateToDisk();
-
-
-    //---
-    // Don't keep worlds unended. look at
-    //  a) WorldsData.vec_world_starts.size
-    //  b) WorldsData.vec_world_ends.size
-    //  c) KidnapTimestamps.kidnap_starts.size
-    //  d) KidnapTimestamps.kidnap_ends.size
-    //      Every world that has started need to end, every kidnap that has started has to end.
-    //      This also implies that `WorldsData.vec_world_starts.size` need to be equal to `WorldsData.vec_world_ends.size`
-    //      also `KidnapTimestamps.kidnap_ends.size` need to be equal to `KidnapTimestamps.kidnap_starts.size`
-    //           If they are not equal make them equal. by ending the world with last known timestamp of node or in case of kidnap as well.
-    // if( obj["KidnapTimestamps"]["kidnap_ends"] )
-    int __a__ = obj.at("WorldsData").at("vec_world_starts").size();
-    int __b__ = obj.at("WorldsData").at("vec_world_ends").size();
-    int __c__ = obj.at("KidnapTimestamps").at("kidnap_starts").size() ;
-    int __d__ = obj.at("KidnapTimestamps").at("kidnap_ends").size() ;
-    cout << TermColor::BLUE() << "a) WorldsData.vec_world_starts.size" << __a__ << TermColor::RESET() << endl;
-    cout << TermColor::BLUE() << "b) WorldsData.vec_world_ends.size" << __b__ << TermColor::RESET() << endl;
-    cout << TermColor::BLUE() << "c) KidnapTimestamps.kidnap_starts.size" << __c__ << TermColor::RESET() << endl;
-    cout << TermColor::BLUE() << "d) KidnapTimestamps.kidnap_ends.size" << __d__ << TermColor::RESET() << endl;
-    auto last_node_timestamp = obj.at("SolvedPoseGraph").rbegin()->at( "stampNSec"); //long int
-
-
-    //assuming CTRL+C was pressed when status was not KIDNAPED
-    // do-1: end the world
-    // do-2: start kidnap
-    // also do when you begin new bag: end kidnap and start new world from 1st item of bag
-
-
-    // assuming CTRL+C was pressed when status was KIDNAPPED
-    // dont do anything as you save data
-    //  when loading data end status kidnap and start new world
-
-
-    #if 0
-    if( __a__ == __b__ ){
-        ; // nothing to do all good
-    }
-    else if( __a__-1 == __b__ ) {
-        // TODO
-        cout << "obj[\"WorldsData\"][\"vec_world_ends\"].push_back( __ );\n";
-        json ___y;
-        ___y["stampNSec"] = last_node_timestamp;
-        obj["WorldsData"]["vec_world_ends"].push_back( ___y );
-
-    } else {
-        cout << "Either __a__ has to be equal to __b__ or __a__ has to be 1 more than b. Currently this is not the case, this looks like something is wrong\n";
-        exit(1);
-    }
-
-
-    if( __c__ == __d__ ){
-        ; // nothing to do all good
-    }
-    else if( __c__ - 1 == __d__  ) {
-        // TODO
-        cout << "obj[\"KidnapTimestamps\"][\"kidnap_ends\"].push_back( __ );\n";
-        json ___y;
-        ___y["stampNSec"] = last_node_timestamp;
-        obj["KidnapTimestamps"]["kidnap_ends"].push_back( ___y );
-
-    } else {
-        cout << "Either __c__ has to be equal to __d__ or __c__ has to be 1 more than b. Currently this is not the case, this looks like something is wrong\n";
-        exit(1);
-    }
-    #endif
-
-    //---
-    // Save JSON
-    cout << "obj[\"SolvedPoseGraph\"].size()=" << obj["SolvedPoseGraph"].size() << endl;
-    RawFileIO::write_string( save_dir_path+"/solved_posegraph.json", obj.dump(4) );
-    cout << TermColor::GREEN() <<  "DONE........    Composer::saveStateToDisk  ^^^^^^^^^^\n" << TermColor::RESET();
-    return true;
-}
-
-
-bool Composer::loadStateFromDisk( string save_dir_path )
-{
-    cout << TermColor::GREEN();
-    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
-    cout << "^^^^^^^^^^    Composer::loadStateFromDisk  ^^^^^^^^^^\n";
-    cout << "^^^^^^^^^^    DIR=" << save_dir_path ;
-    cout << "\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
-    cout << TermColor::RESET();
-
-    //---
-    // Load JSON
-    string json_fname = save_dir_path+"/solved_posegraph.json";
-    cout << TermColor::GREEN() << "[Composer::loadStateFromDisk]Open file: " << json_fname << TermColor::RESET() <<  endl;
-    std::ifstream json_fileptr(json_fname);
-    if( !json_fileptr )
-    {
-        ROS_ERROR( "[Composer::loadStateFromDisk]Cannot load from previous state" );
-        cout << TermColor::RED() << "[Composer::loadStateFromDisk]Fail to open" << json_fname << " file, perhaps it doesnt exist. Cannot load from previous state.\nEXIT(1)"<< endl;
-        exit(1);
-    }
-    json json_obj;
-    json_fileptr >> json_obj;
-    cout << "[DataManager::loadStateFromDisk]Successfully opened file and loaded data "<< json_fname << endl;
-    json_fileptr.close();
-
-
-    //---
-    // Load World Data into class Worlds
-    bool status_w = manager->getWorldsPtr()->loadStateFromDisk( json_obj["WorldsData"] );
-    if( status_w == false ) {
-        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->getWorldsPtr()->loadStateFromDisk returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
-        exit(1);
-    }
-    manager->getWorldsPtr()->print_summary();
-
-
-
-    //---
-    // Load kidnap timestamps into manager->kidnap_data
-    bool status_k = manager->load_kidnap_data_from_json( json_obj["KidnapTimestamps"] );
-    if( status_k == false )
-    {
-        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->load_kidnap_data_from_json() returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
-        exit(1);
-    }
-
-
-    //---
-    // Load Pose Graph
-    bool status_pg = manager->load_solved_posegraph_data_from_json( json_obj );
-    if( status_pg == false )
-    {
-        cout << TermColor::RED() << "[Composer::loadStateFromDisk] manager->load_solved_posegraph_data_from_json() returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
-        exit(1);
-    }
-
-    //---
-    // Adjust variables in object slam (in PoseGraphSLAM), especially the solved_until
-    bool status_slamsolver = slam->load_state(  ); //< this will build up a constant pose graph until this point.
-    if( status_slamsolver == false )
-    {
-        cout << TermColor::RED() << "[Composer::loadStateFromDisk]slam->load_state(  ); returned false\nFATAL ERROR..." << TermColor::RESET() << endl;
-        exit(1);
-    }
-
-
-    return true;
-
-}
