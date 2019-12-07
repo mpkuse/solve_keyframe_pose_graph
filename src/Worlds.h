@@ -25,8 +25,6 @@
 #include <cv_bridge/cv_bridge.h>
 
 #include "utils/PoseManipUtils.h"
-#include "utils/RawFileIO.h"
-
 #include "utils/TermColor.h"
 #include "utils/ElapsedTime.h"
 
@@ -60,10 +58,8 @@ public:
 
     void print_summary( int verbosity = 1) const;
     const string disjoint_set_status() const ;
-    const json disjoint_set_status_json() const; 
     void disjoint_set_status_image(cv::Mat& outIm, bool enable_bubbles=true, bool enable_text=true ) const;
-    json saveStateToDisk() const;
-    bool loadStateFromDisk( json _objk );
+
 
 
     // Just infor me on start of the worlds
@@ -94,7 +90,6 @@ private:
     //disjoint set. TODO: best if you use the boost::disjoint_set rather than a DIY one. the DIY one is prone to errors in implementation.
     mp::DisjointSetForest<bool> disjoint_set; //
     string disjoint_set_debug;
-    string disjoint_set_log; // example: 'add_element:0;add_elemet:1;union_sets:0,1;
 
 
 };
